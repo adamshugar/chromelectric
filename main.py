@@ -15,23 +15,10 @@ import matplotlib.pyplot as plt
 # Auto generate a PDF or other high fidelity plot of single run at end; but also output excel file
 # and have separate program in Python to aggregate plots with error bars
 
-# TODO: Make this into a real Tkinter application with dropdown menu for # gases from 1 to 8,
-# then for each chosen a name of the gas and upper / lower retention time bound, and checkbox for manual integration
-# and prompt / checkbox to save settings and two import file buttons for fid and tcd
-
 # For fitting: use blog post about deconvolution. Also for baseline fitting: convert function to monotonically decreasing
-# (locally) then fit to high degree polynomial, and THEN do integration.
+# (locally) then fit to high degree polynomial, and THEN do integration. Maybe also have absolute value threshold of second deriv
 
 GC_RAW_EXTENSION = 'asc'
-
-def gui_init():
-    # Instantiate root window required to render Tk GUIs
-    root = tk.Tk()
-    root.eval('tk::PlaceWindow . center')
-    # Hide empty 'root' window that pops up while using Tk
-    root.iconify()
-    root.withdraw()
-    return root
 
 # Given a list of gases with minimum and maximum bounds on retention time, find all overlaps
 # between these bounds. Runs in O(n^2); faster than asymptotically optimal (but more complex)

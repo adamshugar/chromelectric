@@ -1,17 +1,10 @@
 import tkinter as tk
-import tkinter.font
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 import re
+import os
 
 padding = 5
-
-def get_background(widget):
-    return '#%x%x%x' % widget.winfo_rgb(widget.cget('background'))
-
-def is_positive_int(str):
-        # Use regex instead of isnumeric() because isnumeric() accepts exponents and fractions.
-        # Must explicitly convert match to boolean because any non-bool return value disables validation. Sigh.
-        return re.match(r'^[0-9]+$', str) != None
+GC_RAW_EXTENSION = 'asc'
 
 class GasRow:
     # Widths in number of characters (these are minimums; if header text is longer, entry box expands)
@@ -29,7 +22,7 @@ class GasRow:
         validate_min_max_command = master.register(self.validate_min_max)
         validate_calib_command = master.register(self.validate_calib)
 
-        (self.gas_var, self.min_var, self.max_var, self.calib_var) = input_vars
+        self.gas_var, self.min_var, self.max_var, self.calib_var = input_vars
         gas_name = ttk.Entry(master, width=GasRow.STRING_WIDTH, textvariable=self.gas_var)
         retention_min = ttk.Entry(
             master, width=GasRow.INT_WIDTH, validate='all',
@@ -45,7 +38,7 @@ class GasRow:
 
         ttk.Label(master, text=f'{index + 1}.').grid(column=0, row=self.base_row, padx=(0, padding), pady=pady)
 
-        (gas_pos, min_pos, max_pos, calib_pos) = column_order
+        gas_pos, min_pos, max_pos, calib_pos = column_order
         span_horiz = tk.W+tk.E
         gas_name.grid(column=gas_pos, row=self.base_row, padx=(0, padding), pady=pady, sticky=span_horiz)
         retention_min.grid(column=min_pos, row=self.base_row, padx=padding, pady=pady, sticky=span_horiz)
@@ -70,7 +63,9 @@ class GasRow:
     def validate_min_max(self, reason, final_text):
         if not final_text:
             return True
-        if not is_positive_int(final_text):
+        # Use regex instead of isnumeric() because isnumeric() accepts exponents and fractions.
+        is_numeric = re.match(r'^[0-9]+$', str) != None
+        if not is_numeric:
             return False
         if reason == 'focusout':
             try:
@@ -90,17 +85,10 @@ class GasRow:
         if reason == 'focusout':
             self.toggle_error_label(float(final_text) == 0, 'calib_error_label', 'Calibration value must be non-zero.')
         return True
-
-class GasListContainer(ttk.LabelFrame):
-    def __init__(self, master):
-        super().__init__(master, text='Gas List Parameters')
-        gas_list = GasList(master=self)
-        gas_list.grid(padx=padding, pady=padding)
-    
 class GasList(ttk.Frame):
     TTK_ERROR_LABEL_STYLE = 'Red.TLabel'
     NUM_FIELDS = 4
-    ADDITIONAL_COLS = 2
+    ADDITIONAL_COLS = 1
     DEFAULT_GAS_COUNT = 2
     MAX_GAS_COUNT = 6
 
@@ -116,27 +104,33 @@ class GasList(ttk.Frame):
         retention_max_title = ttk.Label(self, text='Max. Retention (sec)')
         calib_title = ttk.Label(self, text='Calibration Value')
 
-        (gas_pos, min_pos, max_pos, calib_pos) = range(1, 5)
+        gas_pos, min_pos, max_pos, calib_pos = range(1, 5)
         gas_title.grid(column=gas_pos, row=0, padx=0, sticky=tk.W)
         retention_min_title.grid(column=min_pos, row=0, padx=(padding, 0), sticky=tk.W)
         retention_max_title.grid(column=max_pos, row=0, padx=(padding, 0), sticky=tk.W)
         calib_title.grid(column=calib_pos, row=0, padx=(padding, 0), sticky=tk.W)
 
+        self.auto_integration, self.should_save = (tk.IntVar(value=1), tk.IntVar(value=1))
         self.add_row_button = ttk.Button(self, text='Add Gas', command=self.add_row)
-        self.manual_integration_checkbutton = ttk.Checkbutton(self, text='Enable automatic integration')
-        self.save_params_checkbutton = ttk.Checkbutton(self, text='Save these parameters')
-        self.footer_widgets = [self.add_row_button, self.manual_integration_checkbutton, self.save_params_checkbutton]
+        self.auto_integration_checkbutton = ttk.Checkbutton(self, text='Enable automatic integration', variable=self.auto_integration)
+        self.should_save_checkbutton = ttk.Checkbutton(self, text='Save these parameters for future analysis', variable=self.should_save)
+        self.footer_widgets = [self.add_row_button, self.auto_integration_checkbutton, self.should_save_checkbutton]
 
-        self.gas_params = []
+        self.gas_list = []
+        self.params = {
+            'gas_list': self.gas_list,
+            'auto_integration': self.auto_integration,
+            'should_save': self.should_save
+        }
         for _ in range(GasList.DEFAULT_GAS_COUNT):
             self.add_row()
 
     def attach_footer_widgets(self):
         self.add_row_button.grid(
             columnspan=GasList.NUM_FIELDS + GasList.ADDITIONAL_COLS, pady=(padding * 2, 0))
-        self.manual_integration_checkbutton.grid(
+        self.auto_integration_checkbutton.grid(
             columnspan=GasList.NUM_FIELDS + GasList.ADDITIONAL_COLS, pady=(padding, 0), sticky=tk.W)
-        self.save_params_checkbutton.grid(
+        self.should_save_checkbutton.grid(
             columnspan=GasList.NUM_FIELDS + GasList.ADDITIONAL_COLS, pady=(padding, 0), sticky=tk.W)
         
     def detach_footer_widgets(self):
@@ -146,22 +140,90 @@ class GasList(ttk.Frame):
     def add_row(self):
         self.detach_footer_widgets()
         
-        index = len(self.gas_params)
+        index = len(self.gas_list)
         vars = (tk.StringVar() for _ in range(GasList.NUM_FIELDS))
         GasRow(master=self, index=index, row_number=index + 1, input_vars=vars)
-        self.gas_params.append(vars)
+        self.gas_list.append(vars)
 
         self.attach_footer_widgets()
         if index + 1 >= GasList.MAX_GAS_COUNT:
             self.add_row_button.grid_remove()
 
+class FilePicker(ttk.Frame):
+    def __init__(self, master, file_label, file_type, variable, label_text, msg_detail='', button_text='Browse'):
+        super().__init__(master)
+        self.file_variable = variable
+        self.label_variable = tk.StringVar(value=label_text)
+
+        self.file_label = file_label
+        self.file_type = file_type
+        self.msg_detail = msg_detail
+
+        picker_button = ttk.Button(self, text=button_text, command=self.get_filepath)
+        picker_label = ttk.Label(self, textvariable=self.label_variable)
+        picker_button.grid(row=0, column=0, sticky=tk.W, padx=(0, padding), pady=padding)
+        picker_label.grid(row=0, column=1, sticky=tk.W, pady=padding)
+
+    def get_filepath(self):
+        filepath = self.prompt_filepath()
+        self.file_variable.set(filepath)
+        if filepath:
+            _, tail = os.path.split(filepath)
+            self.label_variable.set(tail)
+        
+    def prompt_filepath(self):
+        file_picked = False
+        while not file_picked:
+            try:
+                detail_str = f' {self.msg_detail}' if len(self.msg_detail) > 0 else ''
+                path = filedialog.askopenfilename(
+                    title=f'Select a {self.file_label} file.{detail_str}',
+                    filetypes=[(self.file_label, self.file_type)])
+                handle = open(path, 'r') # Check that file is openable
+                file_picked = True
+            except IOError as err:
+                should_retry = messagebox.askretrycancel(
+                    'Unable to open file',
+                    f'Error while opening {self.file_label} file. {err.strerror}.')
+                if not should_retry:
+                    return None
+        handle.close()
+        return path
+
+class FileList(ttk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        var = tk.StringVar()
+        filepaths = {}
+        gc_files = ['FID', 'TCD']
+        for gc_file in gc_files:
+            msg_detail = f"""This will be the only {gc_file} file from which 
+            to choose integration bounds if automatic integration is enabled."""
+            label_text = 'No file selected.'
+            filepaths[gc_file] = tk.StringVar()
+            file_picker = FilePicker(
+                self, button_text=f'Choose {gc_file} File', file_label=gc_file, file_type=f'.{GC_RAW_EXTENSION}',
+                variable=filepaths[gc_file], msg_detail=msg_detail, label_text=label_text)
+            file_picker.grid(sticky=tk.W)
+
 class Application(ttk.Frame):
+    PADX, PADY = (25, 20)
+
     def __init__(self, master):
         super().__init__(master)
         self.grid()
-        gas_list = GasListContainer(self)
-        gas_list.grid(padx=100, pady=100)
-        # self.grid(column=0, row=0, sticky=tk.N+tk.S+tk.E+tk.W)
+
+        container = ttk.Frame(self)
+        container.grid(padx=Application.PADX, pady=Application.PADY)
+
+        gas_list = GasList(container)
+        gas_list.grid()
+
+        separator = ttk.Separator(container, orient=tk.HORIZONTAL)
+        separator.grid(pady=Application.PADY, sticky=tk.E+tk.W)
+
+        file_list = FileList(container)
+        file_list.grid(sticky=tk.W)
 
 def get_geometry(frame):
     geometry = frame.winfo_geometry()
@@ -183,12 +245,12 @@ def center_window(root, y_percent=100):
     root.withdraw()
     root.attributes('-fullscreen', True)
     root.update_idletasks()
-    (screen_width, screen_height, *_) = get_geometry(root)
+    screen_width, screen_height, *_ = get_geometry(root)
     root.attributes('-fullscreen', False)
 
     root.deiconify()
     root.update_idletasks()
-    (window_width, window_height, *_) = get_geometry(root)
+    window_width, window_height, *_ = get_geometry(root)
 
     pos_x = round(screen_width / 2 - window_width / 2)
     pos_y = round((screen_height / 2 - window_height / 2) * y_percent / 100)
