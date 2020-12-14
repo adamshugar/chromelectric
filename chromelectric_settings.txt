@@ -1,0 +1,27 @@
+{
+    "gas_names": [
+        "H2",
+        "C2H4",
+        "CH4",
+        "CO"
+    ],
+    "retention_bounds": {
+        "H2": [
+            48,
+            120
+        ],
+        "C2H4": [
+            540,
+            760
+        ],
+        "CH4": [
+            90,
+            240
+        ],
+        "CO": [
+            90,
+            240
+        ]
+    },
+    "manual_integration": false
+}
