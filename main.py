@@ -34,13 +34,7 @@ class Application(ttk.Frame):
         # At least one valid needed
         print(self.gas_list.get_parsed_input())
         print(self.additional_fields.get_parsed_input())
-        file_list = self.file_list.get_parsed_input()
-        print(file_list)
-        list_tcd = self.analyze_gc(file_list['TCD'])
-        list_fid = self.analyze_gc(file_list['FID'])
-        print(list_tcd)
-        print(list_fid)
-        
+        print(self.file_list.get_parsed_input())
 
 def get_geometry(frame):
     geometry = frame.winfo_geometry()

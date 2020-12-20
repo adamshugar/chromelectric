@@ -137,17 +137,19 @@ class GasList(ttk.Frame):
             except ValueError:
                 continue # Only complete gas with valid calibration value to parsed result
 
-            is_retention_valid = not retention_min or not retention_max or retention_min < retention_max
-            are_inputs_valid = name and is_retention_valid and calib_val > 0
-            if are_inputs_valid:
+            are_required_inputs_valid = name and calib_val > 0
+            if are_required_inputs_valid:
                 if name in result['attributes_by_gas_name']:
                     result['duplicates'].append(name)
                 result['attributes_by_gas_name'][name] = {
-                    'retention_min': retention_min,
-                    'retention_max': retention_max,
+                    
                     'calibration_value': calib_val,
                     'channel': channel
                 }
+                is_retention_valid = retention_min is None or retention_max is None or retention_min < retention_max
+                if is_retention_valid:
+                    result['attributes_by_gas_name'][name]['retention_min'] = retention_min
+                    result['attributes_by_gas_name'][name]['retention_max'] = retention_max
 
         return result
 

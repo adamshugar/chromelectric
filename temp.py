@@ -110,10 +110,10 @@ def prompt_missing_settings(settings, settings_path):
 
     was_field_updated = False
     for field, prompt_func in prompts_by_field.items():
-        if settings.get(field) == None:
+        if settings.get(field) is None:
             settings[field] = prompt_func(settings)
             was_field_updated = True
-        if settings.get(field) == None:
+        if settings.get(field) is None:
             return None
     
     if was_field_updated:
