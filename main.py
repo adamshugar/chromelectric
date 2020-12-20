@@ -3,6 +3,7 @@ from tkinter import ttk
 import re
 from gui.paraminput import GasList, AdditionalFields
 from gui.filepick import FileList
+import matplotlib.pyplot as plt
 
 class Application(ttk.Frame):
     PADX, PADY = (25, 20)
@@ -24,11 +25,11 @@ class Application(ttk.Frame):
         separator.grid(pady=Application.PADY, sticky=tk.E+tk.W)
 
         self.file_list = FileList(container)
-        self.file_list.grid(sticky=tk.W)
+        self.file_list.grid(sticky=tk.W+tk.E)
 
         run_button = ttk.Button(container, text='Integrate', command=self.print_test)
         run_button.grid(sticky=tk.E, pady=(Application.PADY, 0))
-        
+
     def print_test(self):
         # Invalid params ignore notification
         # At least one valid needed

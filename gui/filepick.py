@@ -3,6 +3,7 @@ import tkinter as tk
 import textwrap
 import os
 from functools import reduce
+import matplotlib.pyplot as plt
 from utils import filetype, find_sequences, duration_to_str
 import algos.fileparse as fileparse
 import gui.constants as GUI
@@ -24,7 +25,6 @@ class FilePicker(ttk.Frame):
         picker_label = ttk.Label(self, textvariable=self.label_variable)
         picker_button.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING), pady=GUI.PADDING)
         picker_label.grid(row=0, column=1, sticky=tk.W, pady=GUI.PADDING)
-        
 
     def on_click_picker(self):
         filepath = self.prompt_filepath()
@@ -67,24 +67,44 @@ class FilePicker(ttk.Frame):
 class CAFilePicker(FilePicker):
     def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
         super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
-        self.parsed_data = None
+        self.parsed_data = self.current_fig = self.resistance_fig = None
 
         self.parsed_frame = ttk.Frame(self)
         self.parsed_message = tk.StringVar()
         parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
-        button_frame = ttk.Frame(self.parsed_frame, relief=tk.GROOVE)
-        current_button = ttk.Button(button_frame, text='View I vs. t')
-        resistance_button = ttk.Button(button_frame, text='View Ω vs. t')
+        button_frame = ttk.Frame(self.parsed_frame)
+        current_button = ttk.Button(button_frame, text='View I vs. t', command=self.on_click_current)
+        resistance_button = ttk.Button(button_frame, text='View Ω vs. t', command=self.on_click_resistance)
 
         parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING))
         button_frame.grid(row=0, column=1, sticky=tk.E)
         current_button.grid(row=0, column=0, sticky=tk.E)
-        resistance_button.grid(row=0, column=1, sticky=tk.E)
+        resistance_button.grid(row=0, column=1, sticky=tk.E, padx=(GUI.PADDING * 2, 0))
+        
         self.parsed_frame.columnconfigure(1, weight=1)
-        button_frame.columnconfigure(0, weight=1)
-        # TODO: Also graph change in resistance over time (from current and potential)
-        # View CA file raw
-        # View system resistance over time (measure of stability/hysteresis)
+        self.columnconfigure(1, weight=1)
+    
+    def on_click_current(self):
+        current_vs_time = self.parsed_data['current_vs_time']
+        current_title = 'Current vs. Time in Cyclic Amperometry'
+        fig = plt.figure(current_title)
+        ax = fig.add_subplot()
+        ax.plot(current_vs_time[:, 0], current_vs_time[:, 1])
+        ax.set_title(current_title)
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Current (mA)')
+        plt.show()
+
+    def on_click_resistance(self):
+        resistance_vs_time = self.parsed_data['resistance_vs_time']
+        resistance_title = 'Resistance vs. Time in Cyclic Amperometry'
+        fig = plt.figure(resistance_title)
+        ax = fig.add_subplot()
+        ax.plot(resistance_vs_time[:, 0], resistance_vs_time[:, 1])
+        ax.set_title(resistance_title)
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Resistance (kΩ)')
+        plt.show()
 
     def on_click_picker(self):
         filepath, parsed_data = self.prompt_filepath()
@@ -99,12 +119,15 @@ class CAFilePicker(FilePicker):
                 Found cyclic amperometry data with total
                 duration {duration_to_str(time_diff)}
                 spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."""))
-            self.parsed_frame.grid(column=1, columnspan=2, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
+            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
 
     def prompt_filepath(self):
-        filepath = super().prompt_filepath()
         valid_file_picked = False
         while not valid_file_picked:
+            filepath = super().prompt_filepath()
+            if not filepath:
+                return (None, None)
+            
             try:
                 parsed_data = fileparse.CA.parse_file(filepath)
                 valid_file_picked = True
@@ -127,11 +150,12 @@ class GCFilePicker(FilePicker):
         self.parsed_list = None
 
     def on_click_picker(self):
-        filepath, parsed_list = self.prompt_filepath()
+        filepath, parsed_list, sequences = self.prompt_filepath()
         if filepath:
             self.set_filepath_label(filepath)
             self.filepath = filepath
             self.parsed_list = parsed_list
+            print(sequences)
     
     def prompt_filepath(self):
         valid_file_picked = False
@@ -141,7 +165,7 @@ class GCFilePicker(FilePicker):
                 return (None, None)
         
             result = GCFilePicker.get_parsed_list(filepath)
-            parsed_list, error_message = (result.get('parsed_list'), result.get('error_message'))
+            parsed_list, error_message, sequences = (result.get('parsed_list'), result.get('error_message'), result.get('sequences'))
             if not parsed_list: # If no list, then we failed, so need to re-pick
                 should_retry = prompts.retrycancel(
                     title='Error while reading file list', message=error_message, style=prompts.ERROR)
@@ -159,7 +183,7 @@ class GCFilePicker(FilePicker):
             else:
                 valid_file_picked = True
         
-        return (filepath, parsed_list)
+        return (filepath, parsed_list, sequences)
 
     def get_parsed_input(self):
         return self.parsed_list
@@ -173,17 +197,17 @@ class GCFilePicker(FilePicker):
         
         # Alert the user of any potentially missing injections
         sequences = find_sequences([*raw_list])
-        first_injection = sequences[1][0]
+        first_injection = sequences[0][0]
         next_highest = sequences[1][0] if len(sequences) > 1 else None
         missing_list = []
         if next_highest:
             missing_list.append((f'Found injection {next_highest} after contiguous run '
                                 f'of injections {first_injection} through {sequences[0][1]}.'))
         if first_injection > 1:
-            missing_list.append(f'Injection {first_injection} was first found (expected injection 1).')
-        error_message = 'Missing files detected.\n' + reduce(lambda accum, next: accum + '\n' + next, missing_list) if missing_list else None
+            missing_list.append(f'Injection {first_injection} was first found. Expected injection 1.')
+        error_message = 'Missing files detected.\n\n' + reduce(lambda accum, next: accum + '\n\n' + next, missing_list) if missing_list else None
         
-        parsed_list = fileparse.GC.parse_list(raw_list, sequence_bounds)
+        parsed_list = fileparse.GC.parse_list(raw_list)
         if not isinstance(parsed_list, dict):
             io_fail_index = parsed_list
             error_message = f'File read failed for injection {io_fail_index}.'
@@ -191,7 +215,8 @@ class GCFilePicker(FilePicker):
         
         return {
             'parsed_list': parsed_list,
-            'error_message': error_message
+            'error_message': error_message,
+            'sequences': sequences
         }
 
 class FileList(ttk.Frame):
@@ -219,7 +244,9 @@ class FileList(ttk.Frame):
             self.file_pickers[file_label] = instance(
                 self, button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
                 msg_detail=msg_detail, label_text=label_text)
-            self.file_pickers[file_label].grid(sticky=tk.W)
+            self.file_pickers[file_label].grid(sticky=tk.W+tk.E)
+        
+        self.columnconfigure(0, weight=1)
     
     def get_parsed_input(self):
         return { key: val.get_parsed_input() for key, val in self.file_pickers.items() }

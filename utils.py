@@ -20,11 +20,11 @@ def find_sequences(nums):
     length greater than zero. LeetCode easy. """
     nums.sort()
     prev = nums[0]
-    sequences = [(prev, None)]
+    sequences = [[prev, None]]
     for n in nums[1:]:
         if n > prev + 1:
             sequences[-1][1] = prev
-            sequences.append((n, None))
+            sequences.append([n, None])
         prev = n
     sequences[-1][1] = nums[-1]
     return sequences

@@ -50,10 +50,9 @@ class GC:
         }
     
     @staticmethod
-    def parse_list(raw_list, bounds):
+    def parse_list(raw_list):
         parsed_list = {}
-        for index in range(bounds[0], bounds[1] + 1): # Include final file number
-            path = raw_list.get(index)
+        for index, path in raw_list.items():
             try:
                 handle = open(path, 'r')
             except IOError:
