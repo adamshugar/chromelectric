@@ -1,10 +1,12 @@
 import tkinter as tk
 from tkinter import ttk
 import re
+import matplotlib.pyplot as plt
+import multiprocessing as mp
 from gui.paraminput import GasList, AdditionalFields
 from gui.filepick import FileList
-import matplotlib.pyplot as plt
 
+import psutil
 class Application(ttk.Frame):
     PADX, PADY = (25, 20)
 
@@ -33,9 +35,10 @@ class Application(ttk.Frame):
     def print_test(self):
         # Invalid params ignore notification
         # At least one valid needed
-        print(self.gas_list.get_parsed_input())
-        print(self.additional_fields.get_parsed_input())
-        print(self.file_list.get_parsed_input())
+        # print(self.gas_list.get_parsed_input())
+        # print(self.additional_fields.get_parsed_input())
+        # print(self.file_list.get_parsed_input())
+        print([child.pid for child in psutil.Process().children()])
 
 def get_geometry(frame):
     geometry = frame.winfo_geometry()
@@ -80,4 +83,5 @@ def main():
     app.mainloop()
 
 if __name__ == '__main__':
+    mp.set_start_method('spawn')
     main()

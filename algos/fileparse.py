@@ -80,11 +80,13 @@ class GC:
         shared_filename = tail[:-len(user_input_match.group(0))]
 
         paths_by_index = {}
-        for file in os.listdir(head):
-            match = re.search(shared_filename + suffix_regex, file, re.IGNORECASE)
+        for entry in os.listdir(head):
+            if not os.path.isfile(os.path.join(head, entry)):
+                continue
+            match = re.search(shared_filename + suffix_regex, entry, re.IGNORECASE)
             if match:
                 file_num = int(match.group(1))
-                paths_by_index[file_num] = os.path.join(head, file)
+                paths_by_index[file_num] = os.path.join(head, entry)
         return paths_by_index
 
 class CA:

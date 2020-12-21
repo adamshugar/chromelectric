@@ -30,7 +30,7 @@ def find_sequences(nums):
     return sequences
 
 def sequences_to_str(sequences):
-    return ','.join([f'{s[0]}-{s[1]}' if s[0] != s[1] else str(s[0]) for s in sequences])
+    return ', '.join([f'{s[0]}-{s[1]}' if s[0] != s[1] else str(s[0]) for s in sequences])
 
 def duration_to_str(duration_seconds):
     mins_total = duration_seconds // 60

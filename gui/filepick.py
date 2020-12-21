@@ -4,10 +4,36 @@ import textwrap
 import os
 from functools import reduce
 import matplotlib.pyplot as plt
-from utils import filetype, find_sequences, duration_to_str
+import numpy as np
+import multiprocessing as mp
+from utils import filetype, find_sequences, duration_to_str, sequences_to_str
 import algos.fileparse as fileparse
 import gui.constants as GUI
 import gui.prompts as prompts
+
+# Need to define graphing functions at top level in order to be "pickle-able" for multiprocessing.
+# See https://stackoverflow.com/questions/8804830/python-multiprocessing-picklingerror-cant-pickle-type-function.
+def single_graph(title, x, y, xlabel, ylabel):
+    fig = plt.figure(title)
+    ax = fig.add_subplot()
+    ax.plot(x, y)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    plt.show()
+
+def carousel_graph():
+    pass
+
+def subprocess_graph(obj, subprocess_attrname, target, args):
+    try:
+        subprocess = getattr(obj, subprocess_attrname)
+    except AttributeError:
+        subprocess = None
+    if not subprocess or not subprocess.is_alive():
+        new_subprocess = mp.Process(target=target, args=args)
+        setattr(obj, subprocess_attrname, new_subprocess)
+        new_subprocess.start()
 
 class FilePicker(ttk.Frame):
     MAX_DISPLAY_LEN = 70
@@ -67,14 +93,14 @@ class FilePicker(ttk.Frame):
 class CAFilePicker(FilePicker):
     def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
         super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
-        self.parsed_data = self.current_fig = self.resistance_fig = None
+        self.parsed_data = None
 
         self.parsed_frame = ttk.Frame(self)
         self.parsed_message = tk.StringVar()
         parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
         button_frame = ttk.Frame(self.parsed_frame)
-        current_button = ttk.Button(button_frame, text='View I vs. t', command=self.on_click_current)
-        resistance_button = ttk.Button(button_frame, text='View Ω vs. t', command=self.on_click_resistance)
+        current_button = ttk.Button(button_frame, text='View mA vs. t', command=self.on_click_current)
+        resistance_button = ttk.Button(button_frame, text='View kΩ vs. t', command=self.on_click_resistance)
 
         parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING))
         button_frame.grid(row=0, column=1, sticky=tk.E)
@@ -85,26 +111,18 @@ class CAFilePicker(FilePicker):
         self.columnconfigure(1, weight=1)
     
     def on_click_current(self):
-        current_vs_time = self.parsed_data['current_vs_time']
-        current_title = 'Current vs. Time in Cyclic Amperometry'
-        fig = plt.figure(current_title)
-        ax = fig.add_subplot()
-        ax.plot(current_vs_time[:, 0], current_vs_time[:, 1])
-        ax.set_title(current_title)
-        ax.set_xlabel('Time (sec)')
-        ax.set_ylabel('Current (mA)')
-        plt.show()
+        data = self.parsed_data['current_vs_time']
+        subprocess_graph(
+            obj=self, subprocess_attrname='current_subprocess', target=single_graph,
+            args=('Current vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
+            'Time (sec)', 'Current (mA)'))
 
     def on_click_resistance(self):
-        resistance_vs_time = self.parsed_data['resistance_vs_time']
-        resistance_title = 'Resistance vs. Time in Cyclic Amperometry'
-        fig = plt.figure(resistance_title)
-        ax = fig.add_subplot()
-        ax.plot(resistance_vs_time[:, 0], resistance_vs_time[:, 1])
-        ax.set_title(resistance_title)
-        ax.set_xlabel('Time (sec)')
-        ax.set_ylabel('Resistance (kΩ)')
-        plt.show()
+        data = self.parsed_data['resistance_vs_time']
+        subprocess_graph(
+            obj=self, subprocess_attrname='resistance_subprocess', target=single_graph,
+            args=('Resistance vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
+            'Time (sec)', 'Resistance (kΩ)'))
 
     def on_click_picker(self):
         filepath, parsed_data = self.prompt_filepath()
@@ -116,8 +134,8 @@ class CAFilePicker(FilePicker):
             time_diff = parsed_data['current_vs_time'][-1][0] - parsed_data['current_vs_time'][0][0]
             potentials = parsed_data['potentials_by_trial']
             self.parsed_message.set(textwrap.dedent(f"""\
-                Found cyclic amperometry data with total
-                duration {duration_to_str(time_diff)}
+                Found cyclic amperometry data with
+                total duration {duration_to_str(time_diff)}
                 spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."""))
             self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
 
@@ -143,26 +161,45 @@ class CAFilePicker(FilePicker):
     def get_parsed_input(self):
         return self.parsed_data
 
-# TODO: 'Found n total injections with indices <s1>-<e1>, <s2>-<e2> and mean duration x hours, y minutes, and z seconds.'
 class GCFilePicker(FilePicker):
     def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
         super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_list = None
+        self.view_subprocess = None
+
+        self.parsed_frame = ttk.Frame(self)
+        self.parsed_message = tk.StringVar()
+        parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
+        view_button = ttk.Button(self.parsed_frame, text='View mV vs. t', command=self.on_click_view)
+
+        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING))
+        view_button.grid(row=0, column=1, sticky=tk.E)
+        
+        self.parsed_frame.columnconfigure(1, weight=1)
+        self.columnconfigure(1, weight=1)
+
+    def on_click_view(self):
+        pass
 
     def on_click_picker(self):
         filepath, parsed_list, sequences = self.prompt_filepath()
-        if filepath:
-            self.set_filepath_label(filepath)
+        if parsed_list is not None:
             self.filepath = filepath
             self.parsed_list = parsed_list
-            print(sequences)
+
+            self.set_filepath_label(filepath)
+            mean_duration = np.mean([injection['run_duration'] for _, injection in parsed_list.items()])
+            self.parsed_message.set(textwrap.dedent(f"""\
+                Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)}
+                and mean duration {duration_to_str(mean_duration)}."""))
+            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
     
     def prompt_filepath(self):
         valid_file_picked = False
         while not valid_file_picked:
             filepath = super().prompt_filepath()
             if not filepath:
-                return (None, None)
+                return (None, None, None)
         
             result = GCFilePicker.get_parsed_list(filepath)
             parsed_list, error_message, sequences = (result.get('parsed_list'), result.get('error_message'), result.get('sequences'))
@@ -170,12 +207,12 @@ class GCFilePicker(FilePicker):
                 should_retry = prompts.retrycancel(
                     title='Error while reading file list', message=error_message, style=prompts.ERROR)
                 if not should_retry:
-                    return (None, None)
+                    return (None, None, None)
             elif error_message: # If list exists but there is an error message, it's just a warning (re-pick optional)
                 response = prompts.abortretryignore(
                     title='Missing injection files', message=error_message, style=prompts.WARNING)
                 if response is None: # User elected to abort
-                    return (None, None)
+                    return (None, None, None)
                 elif response: # User elected to retry
                     continue
                 else:

@@ -85,7 +85,7 @@ class GasList(ttk.Frame):
     TTK_ERROR_LABEL_STYLE = 'Red.TLabel'
     NUM_FIELDS = 5
     DEFAULT_GAS_COUNT = 2
-    MAX_GAS_COUNT = 6
+    MAX_GAS_COUNT = 5
 
     def __init__(self, master):
         super().__init__(master)
