@@ -153,11 +153,13 @@ class Application(ttk.Frame):
         self.notebook = DynamicNotebook(container)
         self.general_params = GeneralParams(self.notebook, padx=padx, pady=pady)
         self.file_analysis = FileAnalysis(self.notebook, padx=padx, pady=pady)
+        general_params_name = 'General Parameters' if not is_windows() else ' General Parameters '
+        file_analysis_name = 'File Analysis' if not is_windows() else ' File Analysis '
         self.tabs_by_name = {
-            'General Parameters': self.general_params,
-            'File Analysis': self.file_analysis,
+            general_params_name: self.general_params,
+            file_analysis_name: self.file_analysis,
         }
-        self.notebook.setup(self.tabs_by_name, first_tab='General Parameters')
+        self.notebook.setup(self.tabs_by_name, first_tab=general_params_name)
         self.notebook.grid()
 
         center_window(root, y_percent=50)

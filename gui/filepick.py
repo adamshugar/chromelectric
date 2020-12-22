@@ -76,7 +76,7 @@ class FilePicker(ttk.Frame):
         while not file_picked:
             try:
                 detail_str = f' {self.msg_detail}' if len(self.msg_detail) > 0 else ''
-                platform_file_label = f'{self.file_label} (.{self.file_type})' if is_windows() else self.file_label
+                platform_file_label = f'{self.file_label} ({self.file_type})' if is_windows() else self.file_label
                 path = filedialog.askopenfilename(
                     title=f'Select a {self.file_label} file. {detail_str}',
                     filetypes=[(platform_file_label, self.file_type)])
