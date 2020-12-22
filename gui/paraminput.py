@@ -1,4 +1,4 @@
-from util import is_nonnegative_int, is_nonnegative_float, safe_int
+from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float
 import tkinter as tk
 from tkinter import ttk
 import gui
@@ -154,59 +154,134 @@ class GasList(ttk.Frame):
 
         return result
 
-# Non-negative floats only
-class FloatEntry(ttk.Frame):
-    def __init__(self, master, before_text, after_text, textvariable):
-        super().__init__(master)
-        validate_command = self.register(FloatEntry.validate)
+# Intentionally does not subclass ttk.Frame so that all ShortEntry objects can share the same grid layout
+class ShortEntry:
+    def __init__(self, master, row, before_text, after_text, textvariable, validation_callback=lambda final_text: True, indent=0):
+        validate_command = master.register(self.validation_wrapper)
+        self.validation_callback = validation_callback
 
-        before_text = ttk.Label(self, text=before_text)
+        before_text = ttk.Label(master, text=before_text)
         entry = ttk.Entry(
-            self, width=gui.INT_WIDTH, validate='key',
+            master, width=gui.FLOAT_WIDTH, validate='key',
             validatecommand=(validate_command, '%P'), textvariable=textvariable)
-        after_text = ttk.Label(self, text=after_text)
+        after_text = ttk.Label(master, text=' ' + after_text)
         
-        before_text.grid(row=0, column=0)
-        entry.grid(row=0, column=1)
-        after_text.grid(row=0, column=2)
+        before_text.grid(row=row, column=0, padx=(indent, gui.PADDING * 2), sticky=tk.W)
+        entry.grid(row=row, column=1)
+        after_text.grid(row=row, column=2, sticky=tk.W)
 
-    @staticmethod
-    def validate(final_text):
-        return not final_text or is_nonnegative_float(final_text)
+    def validation_wrapper(self, final_text):
+        return self.validation_callback(final_text)
 
-# Includes flow rate (sccm) and checkboxes for automatic integration and saving all parameters.
-class AdditionalFields(ttk.Frame):
+class NamedDivider(ttk.Frame):
+    def __init__(self, master, name):
+        super().__init__(master)
+        ttk.Label(self, text=name).grid(row=0, column=0, padx=(0, gui.PADDING * 2), sticky=tk.W)
+        ttk.Separator(self, orient=tk.HORIZONTAL).grid(row=0, column=1, sticky=tk.W+tk.E)
+        self.columnconfigure(1, weight=1)
+
+class CheckbuttonList(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
-        self.flow_rate, self.auto_integration, self.should_save = (tk.StringVar(), tk.IntVar(value=1), tk.IntVar(value=1))
-        self.flow_rate_entry = FloatEntry(
-            self, before_text='Total flow rate of electrochemically active gas: ', after_text=' sccm', textvariable=self.flow_rate)
-        self.auto_integration_checkbutton = ttk.Checkbutton(
-            self, text='Enable automatic integration (i.e. for a given channel, choose bounds on single injection to apply to all)',
-            variable=self.auto_integration)
-        self.should_save_checkbutton = ttk.Checkbutton(
-            self, text='Save these parameters to auto-populate for subsequent experiments', variable=self.should_save)
 
-        self.flow_rate_entry.grid(pady=(gui.PADDING * 4, 0), sticky=tk.W)
-        self.auto_integration_checkbutton.grid(pady=(gui.PADDING * 4, 0), sticky=tk.W)
-        self.should_save_checkbutton.grid(pady=(gui.PADDING, 0), sticky=tk.W)
-
-        self.params = {
-            'flow_rate': self.flow_rate,
-            'auto_integration': self.auto_integration,
-            'should_save': self.should_save
+        self.checkbutton_fields = {
+            'plot_j': {
+                'label': 'Generate plot of partial current densities (log(mA/cm²) vs. V)',
+                'default': True
+            },
+            'plot_fe': {
+                'label': 'Generate plot of Faradaic efficiencies (% vs. V)',
+                'default': True
+            },
+            'fe_total': {
+                'label': 'Include total Faradaic efficiency in plot',
+                'default': False,
+                'indent': gui.PADDING * 5
+            },
         }
+
+        self.columnconfigure(0, weight=1)
+        div = NamedDivider(self, name='Additional output parameters')
+        div.grid(pady=(0, gui.PADDING * 3), sticky=tk.E+tk.W)
+        
+        base_indent = gui.PADDING * 5
+        for name, attrs in self.checkbutton_fields.items():
+            attrs['var'] = tk.IntVar(value=int(attrs['default']))
+            attrs['ref'] = ttk.Checkbutton(self, text=attrs['label'], variable=attrs['var'])
+            indent = attrs.get('indent') if attrs.get('indent') else 0
+            attrs['ref'].grid(sticky=tk.W, padx=(base_indent + indent, 0), pady=(0, gui.PADDING))
+
+        self.checkbutton_fields['plot_fe']['ref'].config(command=self.toggle_disable_fe_total)
+
+    def toggle_disable_fe_total(self):
+        fe_total = self.checkbutton_fields['fe_total']['ref']
+        is_enabled = 'disabled' not in fe_total.state()
+        fe_total.state([f"{'' if is_enabled else '!'}disabled"])
+
+class ShortEntryList(ttk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.fe_params = {
+            'flow_total': {
+                'before_text': 'Total gaseous flow rate',
+                'after_text': 'sccm'
+            },
+            'flow_active': {
+                'before_text': 'Flow rate of electrochemically active gases',
+                'after_text': 'sccm'
+            },
+            'mix_vol': {
+                'before_text': 'Pre-GC mixing volume',
+                'after_text': 'mL'
+            }
+        }
+
+        self.v_correction_params = {
+            'high_freq_resistance': {
+                'before_text': 'High frequency resistance (PEIS)',
+                'after_text': 'Ω',
+            },
+            'pH': {
+                'before_text': 'Electrolyte pH',
+                'after_text': '',
+                'allow_negative': True
+            },
+            'ref_potential': {
+                'before_text': 'Reference electrode potential',
+                'after_text': 'V vs. SHE',
+                'allow_negative': True
+            },
+        }
+
+        self.row = 0
+        indent = gui.PADDING * 5
+        self.columnconfigure(2, weight=1)
+
+        div1 = NamedDivider(self, name='Faradaic efficiency parameters')
+        div1.grid(row=self.row, columnspan=3, pady=(0, gui.PADDING * 2), sticky=tk.E+tk.W)
+        self.row += 1
+        self.render_short_entries(self.fe_params, indent=indent)
+        
+        div2 = NamedDivider(self, name='Voltage correction parameters')
+        div2.grid(row=self.row, columnspan=3, pady=(gui.PADDING * 4, gui.PADDING * 2), sticky=tk.E+tk.W)
+        self.row += 1
+        self.render_short_entries(self.v_correction_params, indent=indent)
+
+    def render_short_entries(self, entry_dict, indent):
+        nonnegative_float_validation = lambda final_text: not final_text or is_nonnegative_float(final_text)
+        any_float_validation = lambda final_text: not final_text or final_text == '-' or safe_float(final_text) is not None
+        for field_name, field_attrs in entry_dict.items():
+            field_attrs['var'] = tk.StringVar()
+            validation = any_float_validation if field_attrs.get('allow_negative') else nonnegative_float_validation
+            ShortEntry(
+                self, row=self.row, before_text=field_attrs['before_text'], after_text=field_attrs['after_text'],
+                textvariable=field_attrs['var'], validation_callback=validation, indent=indent)
+            self.row += 1
 
     def get_parsed_input(self):
         result = {}
-
-        try:
-            flow_rate = float(self.params['flow_rate'].get())
-        except ValueError:
-            flow_rate = None
-        result['flow_rate'] = flow_rate
-
-        result['auto_integration_enabled'] = bool(self.params['auto_integration'].get())
-        result['should_save'] = bool(self.params['should_save'].get())
-
+        entry_list = {**self.fe_params, **self.v_correction_params}
+        for entry, attributes in entry_list.items():
+            result[entry] = safe_float(attributes['var'].get())
         return result

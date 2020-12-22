@@ -15,6 +15,12 @@ def safe_int(str):
     except ValueError:
         return None
 
+def safe_float(str):
+    try:
+        return float(str)
+    except ValueError:
+        return None
+
 def find_sequences(nums):
     """ Given an unordered list of non-negative, unique integers, find all contiguous sequences.
     Returns the list of sequences as a list of tuples. Assumes valid input list of ints with 
