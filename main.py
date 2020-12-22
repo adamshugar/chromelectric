@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import multiprocessing as mp
 import gui
 import gui.hdpi as hdpi
-import util
+from util import is_windows
 from gui.paraminput import GasList, ShortEntryList, CheckbuttonList
 from gui.filepick import FileList
 
