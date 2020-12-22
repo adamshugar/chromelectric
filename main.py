@@ -66,7 +66,7 @@ class DynamicNotebook(ttk.Notebook):
     @staticmethod
     # Returns map with keys as tk window names and values as the titles from the original dictionary
     def get_name_map(widgets_by_title):
-        return { widget.winfo_pathname(widget.winfo_id()): name for name, widget in widgets_by_title.items() }
+        return { str(widget): name for name, widget in widgets_by_title.items() }
 
     # Returns ordered list of tab titles
     def tab_titles(self):
