@@ -1,5 +1,6 @@
 """ Basic utility functions. """
 import re
+import os
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -48,6 +49,9 @@ def duration_to_str(duration_seconds):
     field_list = [field_str(val, name) for name, val in fields_by_name.items()]
     result = ', '.join([field for field in field_list if field])
     return result if result else '0 seconds'
+
+def is_windows():
+    return os.name == 'nt'
 
 class filetype:
     GC = 'asc'

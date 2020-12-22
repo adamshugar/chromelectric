@@ -8,7 +8,7 @@ matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import multiprocessing as mp
-from utils import filetype, find_sequences, duration_to_str, sequences_to_str
+from util import filetype, find_sequences, duration_to_str, sequences_to_str
 import algos.fileparse as fileparse
 import gui
 import gui.prompts as prompts

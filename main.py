@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import multiprocessing as mp
 import gui
 import gui.hdpi as hdpi
+import util
 from gui.paraminput import GasList, AdditionalFields
 from gui.filepick import FileList
 
@@ -59,10 +60,16 @@ def center_window(root, y_percent=100):
     root.update_idletasks()
     window_width, window_height, *_ = get_geometry(root)
 
+    is_windows = util.is_windows()
+
+    if not is_windows:
+        root.withdraw()
     root.attributes('-fullscreen', True)
     root.update_idletasks()
     screen_width, screen_height, *_ = get_geometry(root)
     root.attributes('-fullscreen', False)
+    if not is_windows:
+        root.deiconify()
 
     pos_x = round(screen_width / 2 - window_width / 2)
     pos_y = round((screen_height / 2 - window_height / 2) * y_percent / 100)

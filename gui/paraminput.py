@@ -1,4 +1,4 @@
-from utils import is_nonnegative_int, is_nonnegative_float, safe_int
+from util import is_nonnegative_int, is_nonnegative_float, safe_int
 import tkinter as tk
 from tkinter import ttk
 import gui
@@ -184,7 +184,7 @@ class AdditionalFields(ttk.Frame):
         self.auto_integration_checkbutton = ttk.Checkbutton(
             self, text='Enable automatic integration (i.e. for a given channel, choose bounds on single injection to apply to all)',
             variable=self.auto_integration)
-        self.should_save_checkbutton = tk.Checkbutton(
+        self.should_save_checkbutton = ttk.Checkbutton(
             self, text='Save these parameters to auto-populate for subsequent experiments', variable=self.should_save)
 
         self.flow_rate_entry.grid(pady=(gui.PADDING * 4, 0), sticky=tk.W)

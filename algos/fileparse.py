@@ -2,7 +2,7 @@ import numpy as np
 from datetime import datetime
 import re
 import os
-from utils import filetype
+from util import filetype
 
 # Using classes in this module purely as additional namespaces; all methods are static
 # and classes are not meant to be instantiated.

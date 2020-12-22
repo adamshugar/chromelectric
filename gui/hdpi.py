@@ -1,10 +1,14 @@
-import ctypes
-from ctypes import WINFUNCTYPE, windll
-from ctypes.wintypes import UINT, HWND
-import os
-import tkinter as tk
+# For entire module
 from tkinter import ttk
+from util import is_windows
+
+# For Windows-specific functionality
+import ctypes
+import tkinter as tk
 import gui
+if is_windows():
+    from ctypes import WINFUNCTYPE, windll
+    from ctypes.wintypes import UINT, HWND
 
 """
 We need to do a bit of extra work on Windows to accommodate high DPI displays, as detailed here:
@@ -26,12 +30,9 @@ _WIN_DPI_DEFAULT = 72
 
 _IS_HDPI_SUPPORT_ENABLED = True
 
-def _is_windows():
-    return os.name == 'nt'
-
 # Returns a properly scaled root Tk GUI window
 def tk_process_init():    
-    if not _is_windows() or not _IS_HDPI_SUPPORT_ENABLED:
+    if not is_windows() or not _IS_HDPI_SUPPORT_ENABLED:
         return tk.Tk()
     _IS_WIN_HDPI = True
 
@@ -55,6 +56,6 @@ class Button(ttk.Button):
         text = kw.get('text')
         # On high DPI Windows displays, button padding is reduced, so hack around it.
         global SCALE_FACTOR
-        if text and _is_windows() and SCALE_FACTOR > 2:
+        if text and is_windows() and SCALE_FACTOR >= 2:
             kw['text'] = f' {text} '
         super().__init__(master=master, **kw)
