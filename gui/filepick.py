@@ -3,13 +3,17 @@ import tkinter as tk
 import textwrap
 import os
 from functools import reduce
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import multiprocessing as mp
 from utils import filetype, find_sequences, duration_to_str, sequences_to_str
 import algos.fileparse as fileparse
-import gui.constants as GUI
+import gui
 import gui.prompts as prompts
+import gui.hdpi as hdpi
+import ctypes
 
 # Need to define graphing functions at top level in order to be "pickle-able" for multiprocessing.
 # See https://stackoverflow.com/questions/8804830/python-multiprocessing-picklingerror-cant-pickle-type-function.
@@ -47,10 +51,10 @@ class FilePicker(ttk.Frame):
         self.file_type = file_type
         self.msg_detail = msg_detail
 
-        picker_button = ttk.Button(self, text=button_text, command=self.on_click_picker)
+        picker_button = hdpi.Button(self, text=button_text, command=self.on_click_picker)
         picker_label = ttk.Label(self, textvariable=self.label_variable)
-        picker_button.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING), pady=GUI.PADDING)
-        picker_label.grid(row=0, column=1, sticky=tk.W, pady=GUI.PADDING)
+        picker_button.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING), pady=gui.PADDING)
+        picker_label.grid(row=0, column=1, sticky=tk.W, pady=gui.PADDING)
 
     def on_click_picker(self):
         filepath = self.prompt_filepath()
@@ -99,13 +103,13 @@ class CAFilePicker(FilePicker):
         self.parsed_message = tk.StringVar()
         parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
         button_frame = ttk.Frame(self.parsed_frame)
-        current_button = ttk.Button(button_frame, text='View mA vs. t', command=self.on_click_current)
-        resistance_button = ttk.Button(button_frame, text='View kΩ vs. t', command=self.on_click_resistance)
+        current_button = hdpi.Button(button_frame, text='View mA vs. t', command=self.on_click_current)
+        resistance_button = hdpi.Button(button_frame, text='View kΩ vs. t', command=self.on_click_resistance)
 
-        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING))
+        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING))
         button_frame.grid(row=0, column=1, sticky=tk.E)
         current_button.grid(row=0, column=0, sticky=tk.E)
-        resistance_button.grid(row=0, column=1, sticky=tk.E, padx=(GUI.PADDING * 2, 0))
+        resistance_button.grid(row=0, column=1, sticky=tk.E, padx=(gui.PADDING * 2, 0))
         
         self.parsed_frame.columnconfigure(1, weight=1)
         self.columnconfigure(1, weight=1)
@@ -137,7 +141,7 @@ class CAFilePicker(FilePicker):
                 Found cyclic amperometry data with
                 total duration {duration_to_str(time_diff)}
                 spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."""))
-            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
+            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, gui.PADDING))
 
     def prompt_filepath(self):
         valid_file_picked = False
@@ -170,9 +174,9 @@ class GCFilePicker(FilePicker):
         self.parsed_frame = ttk.Frame(self)
         self.parsed_message = tk.StringVar()
         parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
-        view_button = ttk.Button(self.parsed_frame, text='View mV vs. t', command=self.on_click_view)
+        view_button = hdpi.Button(self.parsed_frame, text='View mV vs. t', command=self.on_click_view)
 
-        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, GUI.PADDING))
+        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING))
         view_button.grid(row=0, column=1, sticky=tk.E)
         
         self.parsed_frame.columnconfigure(1, weight=1)
@@ -192,7 +196,7 @@ class GCFilePicker(FilePicker):
             self.parsed_message.set(textwrap.dedent(f"""\
                 Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)}
                 and mean duration {duration_to_str(mean_duration)}."""))
-            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, GUI.PADDING))
+            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, gui.PADDING))
     
     def prompt_filepath(self):
         valid_file_picked = False
@@ -279,7 +283,7 @@ class FileList(ttk.Frame):
                 instance = CAFilePicker
 
             self.file_pickers[file_label] = instance(
-                self, button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
+                self, button_text=f'  Choose {file_label} File  ', file_label=file_label, file_type=f'.{extension}',
                 msg_detail=msg_detail, label_text=label_text)
             self.file_pickers[file_label].grid(sticky=tk.W+tk.E)
         

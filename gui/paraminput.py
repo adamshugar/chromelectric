@@ -1,7 +1,8 @@
-from utils import *
+from utils import is_nonnegative_int, is_nonnegative_float, safe_int
 import tkinter as tk
 from tkinter import ttk
-from . import constants as GUI
+import gui
+import gui.hdpi as hdpi
 
 # Intentionally does not subclass ttk.Frame so that all GasRow objects can share the same grid layout
 class GasRow:
@@ -18,30 +19,30 @@ class GasRow:
         validate_calib_command = master.register(self.validate_calib)
 
         self.gas_var, self.min_var, self.max_var, self.calib_var, self.channel_var = input_vars
-        gas_name = ttk.Entry(master, width=GUI.STRING_WIDTH, textvariable=self.gas_var)
+        gas_name = ttk.Entry(master, width=gui.STRING_WIDTH, textvariable=self.gas_var)
         retention_min = ttk.Entry(
-            master, width=GUI.INT_WIDTH, validate='all',
+            master, width=gui.INT_WIDTH, validate='all',
             validatecommand=(validate_min_max_command, '%V', '%P'), textvariable=self.min_var)
         retention_max = ttk.Entry(
-            master, width=GUI.INT_WIDTH, validate='all',
+            master, width=gui.INT_WIDTH, validate='all',
             validatecommand=(validate_min_max_command, '%V', '%P'), textvariable=self.max_var)
         calib_val = ttk.Entry(
-            master, width=GUI.FLOAT_WIDTH, validate='all',
+            master, width=gui.FLOAT_WIDTH, validate='all',
             validatecommand=(validate_calib_command, '%V', '%P'), textvariable=self.calib_var)
         channel_options = ('FID', 'TCD')
         channel_val = ttk.OptionMenu(master, self.channel_var, channel_options[0], *channel_options)
 
-        pady = (GUI.PADDING, 0)
+        pady = (gui.PADDING, 0)
 
-        ttk.Label(master, text=f'{index + 1}.').grid(column=0, row=self.base_row, padx=(0, GUI.PADDING), pady=pady)
+        ttk.Label(master, text=f'{index + 1}.').grid(column=0, row=self.base_row, padx=(0, gui.PADDING), pady=pady)
 
         gas_pos, min_pos, max_pos, calib_pos, channel_pos = column_order
         span_horiz = tk.W+tk.E
-        gas_name.grid(column=gas_pos, row=self.base_row, padx=(0, GUI.PADDING), pady=pady, sticky=span_horiz)
-        retention_min.grid(column=min_pos, row=self.base_row, padx=GUI.PADDING, pady=pady, sticky=span_horiz)
-        retention_max.grid(column=max_pos, row=self.base_row, padx=GUI.PADDING, pady=pady, sticky=span_horiz)
-        calib_val.grid(column=calib_pos, row=self.base_row, padx=GUI.PADDING, pady=pady, sticky=span_horiz)
-        channel_val.grid(column=channel_pos, row=self.base_row, padx=(GUI.PADDING, 0), pady=pady)
+        gas_name.grid(column=gas_pos, row=self.base_row, padx=(0, gui.PADDING), pady=pady, sticky=span_horiz)
+        retention_min.grid(column=min_pos, row=self.base_row, padx=gui.PADDING, pady=pady, sticky=span_horiz)
+        retention_max.grid(column=max_pos, row=self.base_row, padx=gui.PADDING, pady=pady, sticky=span_horiz)
+        calib_val.grid(column=calib_pos, row=self.base_row, padx=gui.PADDING, pady=pady, sticky=span_horiz)
+        channel_val.grid(column=channel_pos, row=self.base_row, padx=(gui.PADDING, 0), pady=pady)
 
     def toggle_error_label(self, condition, name, message):
         if condition:
@@ -102,13 +103,13 @@ class GasList(ttk.Frame):
 
         gas_pos, min_pos, max_pos, calib_pos, channel_pos = range(1, 6)
         gas_title.grid(column=gas_pos, row=0, padx=0, sticky=tk.W)
-        retention_min_title.grid(column=min_pos, row=0, padx=(GUI.PADDING, 0), sticky=tk.W)
-        retention_max_title.grid(column=max_pos, row=0, padx=(GUI.PADDING, 0), sticky=tk.W)
-        calib_title.grid(column=calib_pos, row=0, padx=(GUI.PADDING, 0), sticky=tk.W)
-        channel_title.grid(column=channel_pos, row=0, padx=(GUI.PADDING, 0), sticky=tk.W)
+        retention_min_title.grid(column=min_pos, row=0, padx=(gui.PADDING, 0), sticky=tk.W)
+        retention_max_title.grid(column=max_pos, row=0, padx=(gui.PADDING, 0), sticky=tk.W)
+        calib_title.grid(column=calib_pos, row=0, padx=(gui.PADDING, 0), sticky=tk.W)
+        channel_title.grid(column=channel_pos, row=0, padx=(gui.PADDING, 0), sticky=tk.W)
 
-        self.add_row_button = ttk.Button(self, text='Add Gas', command=self.add_row)
-        self.add_row_button.grid(row=GasRow.INTERNAL_ROWS_PER_OBJ * GasList.MAX_GAS_COUNT, columnspan=GasList.NUM_FIELDS + 1, pady=(GUI.PADDING * 2, 0))
+        self.add_row_button = hdpi.Button(self, text='Add Gas', command=self.add_row)
+        self.add_row_button.grid(row=GasRow.INTERNAL_ROWS_PER_OBJ * GasList.MAX_GAS_COUNT, columnspan=GasList.NUM_FIELDS + 1, pady=(gui.PADDING * 2, 0))
 
         self.gas_list = []
         for _ in range(GasList.DEFAULT_GAS_COUNT):
@@ -161,7 +162,7 @@ class FloatEntry(ttk.Frame):
 
         before_text = ttk.Label(self, text=before_text)
         entry = ttk.Entry(
-            self, width=GUI.INT_WIDTH, validate='key',
+            self, width=gui.INT_WIDTH, validate='key',
             validatecommand=(validate_command, '%P'), textvariable=textvariable)
         after_text = ttk.Label(self, text=after_text)
         
@@ -179,16 +180,16 @@ class AdditionalFields(ttk.Frame):
         super().__init__(master)
         self.flow_rate, self.auto_integration, self.should_save = (tk.StringVar(), tk.IntVar(value=1), tk.IntVar(value=1))
         self.flow_rate_entry = FloatEntry(
-            self, before_text='Total flow rate of electrochemically active gas: ', after_text='sccm', textvariable=self.flow_rate)
+            self, before_text='Total flow rate of electrochemically active gas: ', after_text=' sccm', textvariable=self.flow_rate)
         self.auto_integration_checkbutton = ttk.Checkbutton(
             self, text='Enable automatic integration (i.e. for a given channel, choose bounds on single injection to apply to all)',
             variable=self.auto_integration)
-        self.should_save_checkbutton = ttk.Checkbutton(
+        self.should_save_checkbutton = tk.Checkbutton(
             self, text='Save these parameters to auto-populate for subsequent experiments', variable=self.should_save)
 
-        self.flow_rate_entry.grid(pady=(GUI.PADDING * 4, 0), sticky=tk.W)
-        self.auto_integration_checkbutton.grid(pady=(GUI.PADDING * 4, 0), sticky=tk.W)
-        self.should_save_checkbutton.grid(pady=(GUI.PADDING, 0), sticky=tk.W)
+        self.flow_rate_entry.grid(pady=(gui.PADDING * 4, 0), sticky=tk.W)
+        self.auto_integration_checkbutton.grid(pady=(gui.PADDING * 4, 0), sticky=tk.W)
+        self.should_save_checkbutton.grid(pady=(gui.PADDING, 0), sticky=tk.W)
 
         self.params = {
             'flow_rate': self.flow_rate,

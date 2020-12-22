@@ -8,6 +8,22 @@ so that our use of internal '_show' method isn't broken by future
 tkinter updates. """
 from tkinter.commondialog import Dialog
 
+# Icons / dialog styles
+ERROR = "error"
+INFO = "info"
+QUESTION = "question"
+WARNING = "warning"
+YES = "yes"
+NO = "no"
+
+# Responses
+_ABORT = "abort"
+_RETRY = "retry"
+
+# Option types
+_ABORTRETRYIGNORE = "abortretryignore"
+_RETRYCANCEL = "retrycancel"
+
 class Message(Dialog):
     command  = "tk_messageBox"
 
@@ -25,20 +41,6 @@ def _show(title=None, message=None, _icon=None, _type=None, **options):
         return NO
     # In others we get a Tcl_Obj.
     return str(res)
-
-# Icons / dialog styles
-ERROR = "error"
-INFO = "info"
-QUESTION = "question"
-WARNING = "warning"
-
-# Responses
-_ABORT = "abort"
-_RETRY = "retry"
-
-# Option types
-_ABORTRETRYIGNORE = "abortretryignore"
-_RETRYCANCEL = "retrycancel"
 
 def retrycancel(title=None, message=None, style=QUESTION, **options):
     "Show an error message with retry and cancel options for the user."

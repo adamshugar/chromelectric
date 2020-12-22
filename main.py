@@ -3,10 +3,11 @@ from tkinter import ttk
 import re
 import matplotlib.pyplot as plt
 import multiprocessing as mp
+import gui
+import gui.hdpi as hdpi
 from gui.paraminput import GasList, AdditionalFields
 from gui.filepick import FileList
 
-import psutil
 class Application(ttk.Frame):
     PADX, PADY = (25, 20)
 
@@ -14,8 +15,11 @@ class Application(ttk.Frame):
         super().__init__(master)
         self.grid()
 
+        padx = Application.PADX * hdpi.SCALE_FACTOR
+        pady = Application.PADY * hdpi.SCALE_FACTOR
+
         container = ttk.Frame(self)
-        container.grid(padx=Application.PADX, pady=Application.PADY)
+        container.grid(padx=padx, pady=pady)
 
         self.gas_list = GasList(container)
         self.gas_list.grid()
@@ -24,21 +28,16 @@ class Application(ttk.Frame):
         self.additional_fields.grid()
 
         separator = ttk.Separator(container, orient=tk.HORIZONTAL)
-        separator.grid(pady=Application.PADY, sticky=tk.E+tk.W)
+        separator.grid(pady=pady, sticky=tk.E+tk.W)
 
         self.file_list = FileList(container)
         self.file_list.grid(sticky=tk.W+tk.E)
 
-        run_button = ttk.Button(container, text='Integrate', command=self.print_test)
-        run_button.grid(sticky=tk.E, pady=(Application.PADY, 0))
+        run_button = hdpi.Button(container, text='Integrate', command=self.print_test)
+        run_button.grid(sticky=tk.E, pady=(pady, 0))
 
     def print_test(self):
-        # Invalid params ignore notification
-        # At least one valid needed
-        # print(self.gas_list.get_parsed_input())
-        # print(self.additional_fields.get_parsed_input())
-        # print(self.file_list.get_parsed_input())
-        print([child.pid for child in psutil.Process().children()])
+        print("Hello world")
 
 def get_geometry(frame):
     geometry = frame.winfo_geometry()
@@ -57,15 +56,13 @@ def center_window(root, y_percent=100):
     0 is top of window touching top of screen. """
     root.attributes('-alpha', 0)
 
-    root.withdraw()
+    root.update_idletasks()
+    window_width, window_height, *_ = get_geometry(root)
+
     root.attributes('-fullscreen', True)
     root.update_idletasks()
     screen_width, screen_height, *_ = get_geometry(root)
     root.attributes('-fullscreen', False)
-
-    root.deiconify()
-    root.update_idletasks()
-    window_width, window_height, *_ = get_geometry(root)
 
     pos_x = round(screen_width / 2 - window_width / 2)
     pos_y = round((screen_height / 2 - window_height / 2) * y_percent / 100)
@@ -75,7 +72,7 @@ def center_window(root, y_percent=100):
     root.attributes('-alpha', 1)
 
 def main():
-    root = tk.Tk()
+    root = hdpi.tk_process_init()
     root.title('Chromelectric')
     root.resizable(False, False)
     app = Application(master=root)
