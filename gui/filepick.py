@@ -2,6 +2,7 @@ from tkinter import ttk, filedialog, messagebox
 import tkinter as tk
 import textwrap
 import os
+from util import is_windows
 from functools import reduce
 import matplotlib
 matplotlib.use('Qt5Agg')
@@ -75,9 +76,10 @@ class FilePicker(ttk.Frame):
         while not file_picked:
             try:
                 detail_str = f' {self.msg_detail}' if len(self.msg_detail) > 0 else ''
+                platform_file_label = f'{self.file_label} (.{self.file_type})' if is_windows() else self.file_label
                 path = filedialog.askopenfilename(
-                    title=f'Select a {self.file_label} file.\n\n{detail_str}',
-                    filetypes=[(self.file_label, self.file_type)])
+                    title=f'Select a {self.file_label} file. {detail_str}',
+                    filetypes=[(platform_file_label, self.file_type)])
                 if not path:
                     return None
                 handle = open(path, 'r') # Check that file is openable
@@ -246,7 +248,7 @@ class GCFilePicker(FilePicker):
                                 f'of injections {first_injection} through {sequences[0][1]}.'))
         if first_injection > 1:
             missing_list.append(f'Injection {first_injection} was first found. Expected injection 1.')
-        error_message = 'Missing files detected.\n\n' + reduce(lambda accum, next: accum + '\n\n' + next, missing_list) if missing_list else None
+        error_message = 'Missing files detected.\n' + reduce(lambda accum, next: accum + '\n' + next, missing_list) if missing_list else None
         
         parsed_list = fileparse.GC.parse_list(raw_list)
         if not isinstance(parsed_list, dict):
@@ -270,15 +272,11 @@ class FileList(ttk.Frame):
 
         for file_label in file_labels:
             if file_label == 'FID' or file_label == 'TCD':
-                msg_detail = textwrap.dedent("""\
-                    Any injection file from the experiment is acceptable, provided that
-                    all injection files are in the same directory and follow the naming scheme:
-                    "<identical_filename><injection_number>.asc".
-                    (The "auto-increment" option in PeakSimple would ensure this.)""")
+                msg_detail = 'Any injection can be chosen, assuming same directory and naming scheme.'
                 extension = filetype.GC
                 instance = GCFilePicker
             else:
-                msg_detail = 'This will be aligned to the GC files to generate the final output.'
+                msg_detail = 'This is aligned to GC files during analysis.'
                 extension = filetype.CA
                 instance = CAFilePicker
 
