@@ -166,7 +166,7 @@ class ShortEntry:
             validatecommand=(validate_command, '%P'), textvariable=textvariable)
         after_text = ttk.Label(master, text=' ' + after_text)
         
-        before_text.grid(row=row, column=0, padx=(indent, gui.PADDING * 2), sticky=tk.W)
+        before_text.grid(row=row, column=0, padx=(indent, gui.PADDING * 2), pady=(gui.PADDING, 0), sticky=tk.W)
         entry.grid(row=row, column=1)
         after_text.grid(row=row, column=2, sticky=tk.W)
 
@@ -259,12 +259,12 @@ class ShortEntryList(ttk.Frame):
         self.columnconfigure(2, weight=1)
 
         div1 = NamedDivider(self, name='Faradaic efficiency parameters')
-        div1.grid(row=self.row, columnspan=3, pady=(0, gui.PADDING * 2), sticky=tk.E+tk.W)
+        div1.grid(row=self.row, columnspan=3, pady=(0, gui.PADDING), sticky=tk.E+tk.W)
         self.row += 1
         self.render_short_entries(self.fe_params, indent=indent)
         
         div2 = NamedDivider(self, name='Voltage correction parameters')
-        div2.grid(row=self.row, columnspan=3, pady=(gui.PADDING * 4, gui.PADDING * 2), sticky=tk.E+tk.W)
+        div2.grid(row=self.row, columnspan=3, pady=(gui.PADDING * 4, gui.PADDING), sticky=tk.E+tk.W)
         self.row += 1
         self.render_short_entries(self.v_correction_params, indent=indent)
 
