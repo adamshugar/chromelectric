@@ -281,7 +281,7 @@ class FileList(ttk.Frame):
                 instance = CAFilePicker
 
             self.file_pickers[file_label] = instance(
-                self, button_text=f'  Choose {file_label} File  ', file_label=file_label, file_type=f'.{extension}',
+                self, button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
                 msg_detail=msg_detail, label_text=label_text)
             self.file_pickers[file_label].grid(sticky=tk.W+tk.E)
         

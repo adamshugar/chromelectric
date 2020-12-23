@@ -24,16 +24,16 @@ class GasRow:
         self.gas_var, self.min_var, self.max_var, self.calib_var, self.channel_var = input_vars
         gas_name = ttk.Entry(master, width=gui.STRING_WIDTH, textvariable=self.gas_var)
         retention_min = ttk.Entry(
-            master, width=gui.INT_WIDTH, validate='all',
+            master, width=gui.INT_WIDTH, justify=tk.RIGHT, validate='all',
             validatecommand=(validate_min_max_command, '%V', '%P'), textvariable=self.min_var)
         retention_max = ttk.Entry(
-            master, width=gui.INT_WIDTH, validate='all',
+            master, width=gui.INT_WIDTH, justify=tk.RIGHT, validate='all',
             validatecommand=(validate_min_max_command, '%V', '%P'), textvariable=self.max_var)
         calib_val = ttk.Entry(
-            master, width=gui.FLOAT_WIDTH, validate='all',
+            master, width=gui.FLOAT_WIDTH, justify=tk.RIGHT, validate='all',
             validatecommand=(validate_calib_command, '%V', '%P'), textvariable=self.calib_var)
         channel_options = ('FID', 'TCD')
-        channel_val = ttk.OptionMenu(master, self.channel_var, channel_options[0], *channel_options)
+        channel_val = ttk.OptionMenu(master, self.channel_var, self.channel_var.get(), *channel_options)
 
         pady = (gui.PADDING, 0)
 
@@ -91,8 +91,9 @@ class GasList(ttk.Frame):
     NUM_FIELDS = 5
     DEFAULT_GAS_COUNT = 2
     MAX_GAS_COUNT = 5
+    SETTINGS_ID = 'attributes_by_gas_name'
 
-    def __init__(self, master):
+    def __init__(self, master, saved_settings=None):
         super().__init__(master)
 
         # Initialize error label style
@@ -116,12 +117,18 @@ class GasList(ttk.Frame):
         self.add_row_button.grid(row=GasRow.INTERNAL_ROWS_PER_OBJ * GasList.MAX_GAS_COUNT, columnspan=GasList.NUM_FIELDS + 1, pady=(gui.PADDING * 2, 0))
 
         self.gas_list = []
-        for _ in range(GasList.DEFAULT_GAS_COUNT):
-            self.add_row()
+        if saved_settings and saved_settings[GasList.SETTINGS_ID]:
+            attributes_by_gas_name = saved_settings[GasList.SETTINGS_ID]
+            attribute_order = ['retention_min', 'retention_max', 'calibration_value', 'channel']
+            for gas_name, attrs in attributes_by_gas_name.items():
+                self.add_row([gas_name, *[attrs[key] for key in attribute_order]])
+        else:
+            for _ in range(GasList.DEFAULT_GAS_COUNT):
+                self.add_row()
 
-    def add_row(self):        
+    def add_row(self, initial_vals=['' for _ in range(NUM_FIELDS)]):        
         index = len(self.gas_list)
-        vars = [tk.StringVar() for _ in range(GasList.NUM_FIELDS)]
+        vars = [tk.StringVar(value=initial_vals[i]) for i in range(GasList.NUM_FIELDS)]
         GasRow(master=self, index=index, header_rows=1, row_number=index, input_vars=vars)
         self.gas_list.append(vars)
 
@@ -129,53 +136,45 @@ class GasList(ttk.Frame):
             self.add_row_button.grid_remove()
 
     def get_parsed_input(self):
-        result = { 'attributes_by_gas_name': {}, 'duplicates': [] }
+        result = { GasList.SETTINGS_ID: {}, 'duplicates': [] }
         for gas in self.gas_list:
             name, retention_min_str, retention_max_str, calib_val_str, channel = [val.get() for val in gas]
 
+            calib_val = safe_float(calib_val_str)
             # Assume if min is blank 0 is intended and if max is blank end of GC run is intended
             retention_min = safe_int(retention_min_str)
             retention_max = safe_int(retention_max_str)
-            
-            try:
-                calib_val = float(calib_val_str)
-            except ValueError:
-                continue # Only complete gas with valid calibration value to parsed result
 
-            are_required_inputs_valid = name and calib_val > 0
-            if are_required_inputs_valid:
-                if name in result['attributes_by_gas_name']:
-                    result['duplicates'].append(name)
-                result['attributes_by_gas_name'][name] = {
-                    
-                    'calibration_value': calib_val,
-                    'channel': channel
-                }
-                is_retention_valid = retention_min is None or retention_max is None or retention_min < retention_max
-                if is_retention_valid:
-                    result['attributes_by_gas_name'][name]['retention_min'] = retention_min
-                    result['attributes_by_gas_name'][name]['retention_max'] = retention_max
+            if not name or not calib_val: # Calibration value must be greater than zero
+                continue
+            
+            if name in result[GasList.SETTINGS_ID]:
+                result['duplicates'].append(name)
+            result[GasList.SETTINGS_ID][name] = {
+                'calibration_value': calib_val,
+                'channel': channel
+            }
+            is_retention_valid = retention_min is None or retention_max is None or retention_min < retention_max
+            if is_retention_valid:
+                result[GasList.SETTINGS_ID][name]['retention_min'] = retention_min
+                result[GasList.SETTINGS_ID][name]['retention_max'] = retention_max
 
         return result
 
 # Intentionally does not subclass ttk.Frame so that all ShortEntry objects can share the same grid layout
 class ShortEntry:
     def __init__(self, master, row, before_text, after_text, textvariable, validation_callback=lambda final_text: True, indent=0):
-        validate_command = master.register(self.validation_wrapper)
-        self.validation_callback = validation_callback
+        validate_command = master.register(validation_callback)
 
         before_text = ttk.Label(master, text=before_text)
         entry = ttk.Entry(
-            master, width=gui.FLOAT_WIDTH, validate='key',
+            master, width=gui.FLOAT_WIDTH, justify=tk.RIGHT, validate='key',
             validatecommand=(validate_command, '%P'), textvariable=textvariable)
         after_text = ttk.Label(master, text=' ' + after_text)
         
         before_text.grid(row=row, column=0, padx=(indent, gui.PADDING * 2), pady=(gui.PADDING, 0), sticky=tk.W)
         entry.grid(row=row, column=1)
         after_text.grid(row=row, column=2, sticky=tk.W)
-
-    def validation_wrapper(self, final_text):
-        return self.validation_callback(final_text)
 
 class NamedDivider(ttk.Frame):
     def __init__(self, master, name):
@@ -185,7 +184,7 @@ class NamedDivider(ttk.Frame):
         self.columnconfigure(1, weight=1)
 
 class CheckbuttonList(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, saved_settings={}):
         super().__init__(master)
 
         self.checkbutton_fields = {
@@ -204,13 +203,16 @@ class CheckbuttonList(ttk.Frame):
             },
         }
 
+        if not isinstance(saved_settings, dict):
+            saved_settings = {}
+
         self.columnconfigure(0, weight=1)
         div = NamedDivider(self, name='Additional output parameters')
         div.grid(pady=(0, gui.PADDING * 3), sticky=tk.E+tk.W)
         
         base_indent = gui.PADDING * 5
         for name, attrs in self.checkbutton_fields.items():
-            attrs['var'] = tk.IntVar(value=int(attrs['default']))
+            attrs['var'] = tk.IntVar(value=int(attrs['default']) if saved_settings[name] is None else int(saved_settings[name]))
             attrs['ref'] = ttk.Checkbutton(self, text=attrs['label'], variable=attrs['var'])
             indent = attrs.get('indent') if attrs.get('indent') else 0
             attrs['ref'].grid(sticky=tk.W, padx=(base_indent + indent, 0), pady=(0, gui.PADDING))
@@ -222,8 +224,11 @@ class CheckbuttonList(ttk.Frame):
         is_enabled = 'disabled' not in fe_total.state()
         fe_total.state([f"{'' if is_enabled else '!'}disabled"])
 
+    def get_parsed_input(self):
+        return { field: bool(self.checkbutton_fields[field]['var'].get()) for field in self.checkbutton_fields }
+
 class ShortEntryList(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, saved_settings={}):
         super().__init__(master)
 
         self.fe_params = {
@@ -258,6 +263,8 @@ class ShortEntryList(ttk.Frame):
             },
         }
 
+        if not isinstance(saved_settings, dict):
+            saved_settings = {}
         self.row = 0
         indent = gui.PADDING * 5
         self.columnconfigure(2, weight=1)
@@ -265,18 +272,18 @@ class ShortEntryList(ttk.Frame):
         div1 = NamedDivider(self, name='Faradaic efficiency parameters')
         div1.grid(row=self.row, columnspan=3, pady=(0, gui.PADDING), sticky=tk.E+tk.W)
         self.row += 1
-        self.render_short_entries(self.fe_params, indent=indent)
+        self.render_short_entries(self.fe_params, indent=indent, saved_settings=saved_settings)
         
         div2 = NamedDivider(self, name='Voltage correction parameters')
         div2.grid(row=self.row, columnspan=3, pady=(gui.PADDING * 4, gui.PADDING), sticky=tk.E+tk.W)
         self.row += 1
-        self.render_short_entries(self.v_correction_params, indent=indent)
+        self.render_short_entries(self.v_correction_params, indent=indent, saved_settings=saved_settings)
 
-    def render_short_entries(self, entry_dict, indent):
+    def render_short_entries(self, entry_dict, indent, saved_settings):
         nonnegative_float_validation = lambda final_text: not final_text or is_nonnegative_float(final_text)
         any_float_validation = lambda final_text: not final_text or final_text == '-' or safe_float(final_text) is not None
         for field_name, field_attrs in entry_dict.items():
-            field_attrs['var'] = tk.StringVar()
+            field_attrs['var'] = tk.StringVar(value=saved_settings[field_name] if saved_settings[field_name] else '')
             validation = any_float_validation if field_attrs.get('allow_negative') else nonnegative_float_validation
             ShortEntry(
                 self, row=self.row, before_text=field_attrs['before_text'], after_text=field_attrs['after_text'],

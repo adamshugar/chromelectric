@@ -1,6 +1,9 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import re
+import os
+import sys
+import json
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import gui
@@ -10,27 +13,56 @@ from gui.paraminput import GasList, ShortEntryList, CheckbuttonList
 from gui.filepick import FileList
 
 class GeneralParams(ttk.Frame):
+    SETTINGS_FILE_NAME = 'chromelectric_settings.txt'
+    SETTINGS_PATH = os.path.join(sys.path[0], SETTINGS_FILE_NAME)
+
     def __init__(self, master, padx=0, pady=0):
         super().__init__(master)
+
+        saved_settings = self.load()
 
         container = ttk.Frame(self)
         container.grid(padx=padx, pady=pady)
 
-        self.gas_list = GasList(container)
+        self.gas_list = GasList(container, saved_settings=saved_settings)
         self.gas_list.grid(sticky=tk.W+tk.E, pady=(0, pady))
 
-        self.short_entry_list = ShortEntryList(container)
+        self.short_entry_list = ShortEntryList(container, saved_settings=saved_settings)
         self.short_entry_list.grid(sticky=tk.E+tk.W, pady=(0, pady))
 
-        self.checkbutton_list = CheckbuttonList(container)
+        self.checkbutton_list = CheckbuttonList(container, saved_settings=saved_settings)
         self.checkbutton_list.grid(sticky=tk.E+tk.W)
 
         self.save_variable = tk.IntVar(value=1) # Default to saving settings automatically
         self.save_checkbutton = ttk.Checkbutton(container, text='Save all above parameters for future runs', variable=self.save_variable)
-        self.save_checkbutton.grid(pady=(pady, 0), columnspan=2)
+        self.save_checkbutton.grid(pady=(pady, 0))
 
+    def load(self):
+        try:
+            file = open(GeneralParams.SETTINGS_PATH, 'r')
+            settings = json.load(file)
+            return settings
+        except IOError:
+            return None # File won't exist on first program run
+
+    def save(self):
+        if not self.save_variable.get():
+            return
+        
+        settings = {
+            **self.gas_list.get_parsed_input(),
+            **self.short_entry_list.get_parsed_input(),
+            **self.checkbutton_list.get_parsed_input()
+        }
+        try:
+            settings_handle = open(GeneralParams.SETTINGS_PATH, 'w')
+            json.dump(settings, settings_handle, indent=4)
+        except IOError as err:
+            messagebox.showwarning(
+                'Unable to save settings',
+                f'Error while saving to settings file. {err.strerror}.')
 class FileAnalysis(ttk.Frame):
-    def __init__(self, master, padx=0, pady=0, min_width=None):
+    def __init__(self, master, padx=0, pady=0, min_width=None, on_click_analysis=None):
         super().__init__(master)
 
         container = ttk.Frame(self)
@@ -42,12 +74,14 @@ class FileAnalysis(ttk.Frame):
         self.file_list = FileList(container)
         self.file_list.grid(sticky=tk.W+tk.E)
 
-        run_button = hdpi.Button(container, text='Integrate', command=self.print_test)
-        run_button.grid(sticky=tk.E, pady=(pady, 0))
+        self.on_click_analysis = on_click_analysis
+        analysis_button = hdpi.Button(container, text='Integrate', command=self.handle_click_analysis)
+        analysis_button.grid(sticky=tk.E, pady=(pady, 0))
 
-    def print_test(self):
-        # Save params here
-        print(self.short_entry_list.get_parsed_input())
+    def handle_click_analysis(self):
+        if self.on_click_analysis:
+            self.on_click_analysis()
+        # TODO: Launch integration subprocess
 
 # Extends the ttk Notebook functionality to dynamically resize on every tab change.
 class DynamicNotebook(ttk.Notebook):
@@ -116,7 +150,7 @@ def get_geometry(frame):
     match = re.match(r'^(\d+)x(\d+)\+(\d+)\+(\d+)$', geometry)
     return [int(val) for val in match.group(*range(1, 5))]
 
-def center_window(root, y_percent=50):
+def center_window(root, y_percent=100):
     """ Center the root window of the Tk application in
     the currently active screen/monitor. Works properly
     with multiscreen setups. Must be called after application
@@ -152,7 +186,9 @@ class Application(ttk.Frame):
 
         self.notebook = DynamicNotebook(container)
         self.general_params = GeneralParams(self.notebook, padx=padx, pady=pady)
-        self.file_analysis = FileAnalysis(self.notebook, padx=padx, pady=pady, min_width=Application.get_largest_width())
+        self.file_analysis = FileAnalysis(
+            self.notebook, padx=padx, pady=pady, on_click_analysis=self.handle_click_analysis,
+            min_width=Application.get_largest_width())
         general_params_name = 'General Parameters' if not is_windows() else ' General Parameters '
         file_analysis_name = 'File Analysis' if not is_windows() else ' File Analysis '
         self.tabs_by_name = {
@@ -163,6 +199,9 @@ class Application(ttk.Frame):
         self.notebook.grid()
 
         center_window(root, y_percent=50)
+
+    def handle_click_analysis(self):
+        self.general_params.save()
     
     @staticmethod
     def get_largest_width():
