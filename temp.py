@@ -13,6 +13,13 @@ matplotlib.use('TkAgg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
+"""
+Later, if possible: test on low DPI displays and multiple monitors
+	Fix tiny Windows checkboxes and weird Notebook on Mac - really should port to PyQt or PySide
+Also multithread the GC/CA file reads so the program never freezes
+Dependencies on Ubuntu: tkinter, matplotlib, and PyQt5
+"""
+
 # Packaging: use PyInstaller to freeze executables for Mac, Windows, Linux, and distribute via Conda
 # Auto generate a PDF or other high fidelity plot of single run at end; but also output excel file
 # and have separate program in Python to aggregate plots with error bars

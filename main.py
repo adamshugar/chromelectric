@@ -25,6 +25,10 @@ class GeneralParams(ttk.Frame):
         self.checkbutton_list = CheckbuttonList(container)
         self.checkbutton_list.grid(sticky=tk.E+tk.W)
 
+        self.save_variable = tk.IntVar(value=1) # Default to saving settings automatically
+        self.save_checkbutton = ttk.Checkbutton(container, text='Save all above parameters for future runs', variable=self.save_variable)
+        self.save_checkbutton.grid(pady=(pady, 0), columnspan=2)
+
 class FileAnalysis(ttk.Frame):
     def __init__(self, master, padx=0, pady=0, min_width=None):
         super().__init__(master)
@@ -42,6 +46,7 @@ class FileAnalysis(ttk.Frame):
         run_button.grid(sticky=tk.E, pady=(pady, 0))
 
     def print_test(self):
+        # Save params here
         print(self.short_entry_list.get_parsed_input())
 
 # Extends the ttk Notebook functionality to dynamically resize on every tab change.
@@ -158,12 +163,7 @@ class Application(ttk.Frame):
         self.notebook.grid()
 
         center_window(root, y_percent=50)
-
-        # 'should_save': {
-        #     'label': 'Save all above parameters for future runs',
-        #     'default': True
-        # }
-
+    
     @staticmethod
     def get_largest_width():
         dummy = tk.Toplevel()

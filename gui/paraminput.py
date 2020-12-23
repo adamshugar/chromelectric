@@ -6,14 +6,17 @@ import gui.hdpi as hdpi
 
 # Intentionally does not subclass ttk.Frame so that all GasRow objects can share the same grid layout
 class GasRow:
-    NUM_ERROR_MESSAGES = 2
-    INTERNAL_ROWS_PER_OBJ = NUM_ERROR_MESSAGES + 1
+    ERRORS_BY_LABEL = {
+        'bounds_error_label': 'Maximum must be greater than minimum.',
+        'calib_error_label': 'Calibration value must be non-zero.'
+    }
+    ERROR_NAMES = [name for name in ERRORS_BY_LABEL]
+    INTERNAL_ROWS_PER_OBJ = len(ERRORS_BY_LABEL) + 1
 
     def __init__(self, master, index, header_rows, row_number, input_vars, column_order=range(1, 6)):
         self.master = master
 
         self.base_row = header_rows + row_number * GasRow.INTERNAL_ROWS_PER_OBJ
-        self.active_errors = 0
 
         validate_min_max_command = master.register(self.validate_min_max)
         validate_calib_command = master.register(self.validate_calib)
@@ -47,15 +50,14 @@ class GasRow:
     def toggle_error_label(self, condition, name, message):
         if condition:
             if not hasattr(self, name):
-                self.active_errors += 1
                 label = ttk.Label(self.master, text=message, style=GasList.TTK_ERROR_LABEL_STYLE)
-                label.grid(columnspan=4, column=1, row=self.base_row + self.active_errors, sticky=tk.W)
+                label.grid(columnspan=4, column=1, row=self.base_row + GasRow.ERROR_NAMES.index(name) + 1, sticky=tk.W)
                 setattr(self, name, label)
         else:
             try:
+                getattr(self, name).grid_forget()
                 getattr(self, name).destroy()
                 delattr(self, name)
-                self.active_errors -= 1
             except AttributeError:
                 pass
 
@@ -70,7 +72,8 @@ class GasRow:
                 max_val = int(self.max_var.get())
             except ValueError:
                 return True # Only toggle error label if both values are populated
-            self.toggle_error_label(min_val >= max_val, 'bounds_error_label', 'Maximum must be greater than minimum.')
+            name = 'bounds_error_label'
+            self.toggle_error_label(min_val >= max_val, name, GasRow.ERRORS_BY_LABEL[name])
         return True
 
     def validate_calib(self, reason, final_text):
@@ -79,7 +82,8 @@ class GasRow:
         if not is_nonnegative_float(final_text):
             return False
         if reason == 'focusout':
-            self.toggle_error_label(float(final_text) == 0, 'calib_error_label', 'Calibration value must be non-zero.')
+            name = 'calib_error_label'
+            self.toggle_error_label(float(final_text) == 0, name, GasRow.ERRORS_BY_LABEL[name])
         return True
 
 class GasList(ttk.Frame):
