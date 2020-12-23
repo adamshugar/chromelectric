@@ -1,6 +1,6 @@
 """ Basic utility functions. """
 import re
-import os
+import sys
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -57,7 +57,7 @@ def duration_to_str(duration_seconds):
     return result if result else '0 seconds'
 
 def is_windows():
-    return os.name == 'nt'
+    return sys.platform.startswith('win32') or sys.platform.startswith('cygwin')
 
 class filetype:
     GC = 'asc'

@@ -26,11 +26,14 @@ class GeneralParams(ttk.Frame):
         self.checkbutton_list.grid(sticky=tk.E+tk.W)
 
 class FileAnalysis(ttk.Frame):
-    def __init__(self, master, padx=0, pady=0):
+    def __init__(self, master, padx=0, pady=0, min_width=None):
         super().__init__(master)
 
         container = ttk.Frame(self)
         container.grid(padx=padx, pady=pady)
+
+        # Dummy min width enforcer widget
+        ttk.Frame(container, width=min_width).grid()
 
         self.file_list = FileList(container)
         self.file_list.grid(sticky=tk.W+tk.E)
@@ -134,15 +137,7 @@ class Application(ttk.Frame):
 
         super().__init__(root)
         self.root = root
-        self.root.bind( "<Configure>", self.handle_resize_scheduler)
         self.grid()
-
-        # We have made the root unable to be resized by the user, so we know that
-        # the only resizing is being done by our DynamicNotebook module. We handle this
-        # resizing to keep the window from jumping around as it is resized.
-        self.scheduled_resize_handler = None
-        # Only handle resize if no more resize events have been triggered for 10 millis
-        self.resize_wait_millis = 10
         
         padx = Application.PADX * hdpi.SCALE_FACTOR
         pady = Application.PADY * hdpi.SCALE_FACTOR
@@ -152,7 +147,7 @@ class Application(ttk.Frame):
 
         self.notebook = DynamicNotebook(container)
         self.general_params = GeneralParams(self.notebook, padx=padx, pady=pady)
-        self.file_analysis = FileAnalysis(self.notebook, padx=padx, pady=pady)
+        self.file_analysis = FileAnalysis(self.notebook, padx=padx, pady=pady, min_width=Application.get_largest_width())
         general_params_name = 'General Parameters' if not is_windows() else ' General Parameters '
         file_analysis_name = 'File Analysis' if not is_windows() else ' File Analysis '
         self.tabs_by_name = {
@@ -167,17 +162,18 @@ class Application(ttk.Frame):
         # 'should_save': {
         #     'label': 'Save all above parameters for future runs',
         #     'default': True
-        # },
-    
-    def handle_resize_scheduler(self, event):
-        print('scheduling')
-        if self.scheduled_resize_handler is not None:
-            self.root.after_cancel(self.scheduled_resize_handler)
-        self.scheduled_resize_handler = self.root.after(self.resize_wait_millis, lambda: self.handle_resize(event))
+        # }
 
-    def handle_resize(self, event):
-        print('handled')
-        self.scheduled_resize_handler = None
+    @staticmethod
+    def get_largest_width():
+        dummy = tk.Toplevel()
+        widest_widget = GasList(dummy)
+        widest_widget.grid()
+        dummy.update_idletasks()
+        result = dummy.winfo_width()
+        widest_widget.destroy()
+        dummy.destroy()
+        return result
 
 def main():
     app = Application()
