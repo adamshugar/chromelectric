@@ -3,7 +3,7 @@ import tkinter as tk
 import textwrap
 import os
 from util import is_windows
-from functools import reduce
+import PySide2
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ import algos.fileparse as fileparse
 import gui
 import gui.prompts as prompts
 import gui.hdpi as hdpi
-import ctypes
+import gui.carousel as carousel
 
 # Need to define graphing functions at top level in order to be "pickle-able" for multiprocessing.
 # See https://stackoverflow.com/questions/8804830/python-multiprocessing-picklingerror-cant-pickle-type-function.
@@ -27,10 +27,10 @@ def single_graph(title, x, y, xlabel, ylabel):
     ax.set_ylabel(ylabel)
     plt.show()
 
-def carousel_graph():
-    pass
+def carousel_graph(graph_list, window_title, index_title, xlabel, ylabel):
+    carousel.launch_window(graph_list, window_title, index_title, xlabel, ylabel)
 
-def subprocess_graph(obj, subprocess_attrname, target, args):
+def atomic_subprocess(obj, subprocess_attrname, target, args):
     try:
         subprocess = getattr(obj, subprocess_attrname)
     except AttributeError:
@@ -118,14 +118,14 @@ class CAFilePicker(FilePicker):
     
     def on_click_current(self):
         data = self.parsed_data['current_vs_time']
-        subprocess_graph(
+        atomic_subprocess(
             obj=self, subprocess_attrname='current_subprocess', target=single_graph,
             args=('Current vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
             'Time (sec)', 'Current (mA)'))
 
     def on_click_resistance(self):
         data = self.parsed_data['resistance_vs_time']
-        subprocess_graph(
+        atomic_subprocess(
             obj=self, subprocess_attrname='resistance_subprocess', target=single_graph,
             args=('Resistance vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
             'Time (sec)', 'Resistance (kΩ)'))
@@ -171,7 +171,7 @@ class GCFilePicker(FilePicker):
     def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
         super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_list = None
-        self.view_subprocess = None
+        self.file_label = file_label
 
         self.parsed_frame = ttk.Frame(self)
         self.parsed_message = tk.StringVar()
@@ -185,7 +185,12 @@ class GCFilePicker(FilePicker):
         self.columnconfigure(1, weight=1)
 
     def on_click_view(self):
-        pass
+        atomic_subprocess(
+            obj=self, subprocess_attrname='carousel_subprocess', target=carousel_graph,
+            args=(
+                self.parsed_list, f'{self.file_label} Injection List View',
+                f'Potential vs. Time for {self.file_label} ' + 'Injection {}',
+                'Time (sec)', 'Potential (mV)'))
 
     def on_click_picker(self):
         filepath, parsed_list, sequences = self.prompt_filepath()
@@ -194,7 +199,7 @@ class GCFilePicker(FilePicker):
             self.parsed_list = parsed_list
 
             self.set_filepath_label(filepath)
-            mean_duration = np.mean([injection['run_duration'] for _, injection in parsed_list.items()])
+            mean_duration = np.mean([injection['x'][-1] for _, injection in parsed_list.items()])
             self.parsed_message.set(textwrap.dedent(f"""\
                 Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)}
                 and mean duration {duration_to_str(mean_duration)}."""))
@@ -242,13 +247,13 @@ class GCFilePicker(FilePicker):
         sequences = find_sequences([*raw_list])
         first_injection = sequences[0][0]
         next_highest = sequences[1][0] if len(sequences) > 1 else None
-        missing_list = []
+        missing_list = ['Missing files detected.']
         if next_highest:
             missing_list.append((f'Found injection {next_highest} after contiguous run '
                                 f'of injections {first_injection} through {sequences[0][1]}.'))
         if first_injection > 1:
             missing_list.append(f'Injection {first_injection} was first found. Expected injection 1.')
-        error_message = 'Missing files detected.\n' + reduce(lambda accum, next: accum + '\n' + next, missing_list) if missing_list else None
+        error_message = '\n'.join(missing_list) if next_highest or first_injection > 1 else None
         
         parsed_list = fileparse.GC.parse_list(raw_list)
         if not isinstance(parsed_list, dict):

@@ -173,6 +173,7 @@ class Application(ttk.Frame):
         root = hdpi.tk_process_init()
         root.title('Chromelectric')
         root.resizable(False, False)
+        root.iconify()
 
         super().__init__(root)
         self.root = root
@@ -199,6 +200,7 @@ class Application(ttk.Frame):
         self.notebook.grid()
 
         center_window(root, y_percent=50)
+        root.deiconify()
 
     def handle_click_analysis(self):
         self.general_params.save()

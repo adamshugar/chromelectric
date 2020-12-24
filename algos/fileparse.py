@@ -30,23 +30,24 @@ class GC:
                 sample_rate = float(re.search(r'\d+(.\d+)?', line).group())
             elif field_name == 'size':
                 # Total number of readings collected during the current injection
-                potential_vs_time_len = int(re.search(r'\d+', line).group())
+                num_readings = int(re.search(r'\d+', line).group())
 
             line = handle.readline()
 
         handle.seek(os.SEEK_SET)
         # Data lines have the form n,n for an integer n (second copy on each line is redundant)
-        potential_vs_time = np.genfromtxt(fname=handle, comments=',', skip_header=meta_count)
+        potentials = np.genfromtxt(fname=handle, comments=',', skip_header=meta_count)
 
         # Build return object with metadata
-        run_duration = potential_vs_time_len / sample_rate # In seconds
-        warning = potential_vs_time.size != potential_vs_time_len # Indicates file might be truncated prematurely
+        run_duration = num_readings / sample_rate # In seconds
+        time_increments = np.linspace(0, run_duration, potentials.size)
+        warning = potentials.size != num_readings # Indicates file might be truncated prematurely
         start_time = datetime.strptime(f'{date_string} {time_string}', r'%m-%d-%Y %H:%M:%S').timestamp()
         return {
-            'run_duration': run_duration,
             'warning': warning,
             'start_time': start_time,
-            'potential_vs_time': potential_vs_time / 1000 # Convert from microvolts to millivolts to match calibration curves
+            'x': time_increments,
+            'y': potentials / 1000 # Convert from microvolts to millivolts to match calibration curves
         }
     
     @staticmethod
