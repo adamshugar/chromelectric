@@ -5,7 +5,7 @@ import os
 from util import is_windows
 import PySide2
 import matplotlib
-matplotlib.use('Qt5Agg')
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 import multiprocessing as mp

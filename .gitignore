@@ -1,7 +1,16 @@
+# OS X
 **/**.DS_Store
+
+# Python
 **/**__pycache__
 
 # venv
 pyvenv.cfg
 bin/
 lib/
+
+# VS Code
+.vscode/
+
+# Generated files
+chromelectric_settings.txt

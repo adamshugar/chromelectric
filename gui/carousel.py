@@ -7,13 +7,14 @@ import PySide2.QtCore as QtCore
 from PySide2.QtCore import Signal, Slot
 from PySide2.QtGui import QIcon, QFont, QIntValidator
 import matplotlib
-matplotlib.use('Qt5Agg')
+# matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 class ApplicationWindow(QMainWindow):
     def __init__(self, graph_list, window_title, index_title, xlabel, ylabel):
         super().__init__()
+
         self.main = QWidget()
         self.setCentralWidget(self.main)
         self.layout = QVBoxLayout(self.main)
@@ -23,19 +24,19 @@ class ApplicationWindow(QMainWindow):
         self.xlabel = xlabel
         self.ylabel = ylabel
 
-        self.canvas = FigureCanvas(Figure())
-        self.layout.addWidget(self.canvas)
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.addToolBar(self.toolbar)
+        # self.canvas = FigureCanvas(Figure())
+        # self.layout.addWidget(self.canvas)
+        # self.toolbar = NavigationToolbar(self.canvas, self)
+        # self.addToolBar(self.toolbar)
 
-        pages = [page for page in self.graph_list]
-        pages.sort()
-        pagination = Pagination(pages, handle_page_change=lambda _, new_page: self.graph_index(new_page))
-        self.layout.addLayout(pagination)
+        # pages = [int(page) for page in self.graph_list]
+        # pages.sort()
+        # pagination = Pagination(pages, handle_page_change=lambda _, new_page: print('hi'))
+        # self.layout.addLayout(pagination)
 
-        self.axes = self.canvas.figure.add_subplot()
-        self.curr_plot = None
-        self.graph_index(1)
+        # self.axes = self.canvas.figure.add_subplot()
+        # self.curr_plot = None
+        # self.graph_index(1)
 
     def graph_index(self, index):
         self.axes.clear()
@@ -81,7 +82,7 @@ class Pagination(QVBoxLayout):
 
         # Container for text entry box and "Go button" only
         self.jump_container = QVBoxLayout()
-        jump_button = PushButton(text='Go')
+        self.jump_button = PushButton(text='Go')
         self.jump_entry = QLineEdit()
         self.jump_entry.setAlignment(QtCore.Qt.AlignHCenter)
         self.jump_entry.setFixedWidth(80)
@@ -90,9 +91,9 @@ class Pagination(QVBoxLayout):
         entry_font.setPointSize(16)
         self.jump_entry.setFont(entry_font)
         self.jump_entry.setValidator(QIntValidator(min(pages), max(pages)))
-        jump_button.clicked.connect(self.handle_jump_click)
+        self.jump_button.clicked.connect(self.handle_jump_click)
         self.jump_container.addWidget(self.jump_entry, alignment=QtCore.Qt.AlignHCenter)
-        self.jump_container.addWidget(jump_button, alignment=QtCore.Qt.AlignHCenter)
+        self.jump_container.addWidget(self.jump_button, alignment=QtCore.Qt.AlignHCenter)
 
         # Initialize overall layout
         self.controls_container.addWidget(self.prev_button, alignment=QtCore.Qt.AlignTop|QtCore.Qt.AlignRight)

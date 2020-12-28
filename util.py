@@ -1,6 +1,7 @@
 """ Basic utility functions. """
 import re
 import sys
+from PySide2.QtWidgets import QApplication
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -58,6 +59,20 @@ def duration_to_str(duration_seconds):
 
 def is_windows():
     return sys.platform.startswith('win32') or sys.platform.startswith('cygwin')
+
+class QtPt:
+    @staticmethod
+    def pt_to_px(pt):
+        BASE_DPI = 72
+        # Logical DPI is more robust than physical DPI (in the caes of retina displays & user customization)
+        logical_dpi = QApplication.instance().primaryScreen().logicalDotsPerInch()
+        return pt * (logical_dpi / BASE_DPI)
+
+    @staticmethod
+    def font_size_px(font):
+        if font.pixelSize() != -1:
+            return font.pixelSize()
+        return QtPt.pt_to_px(font.pointSize())
 
 class filetype:
     GC = 'asc'
