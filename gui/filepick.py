@@ -1,20 +1,19 @@
-from tkinter import ttk, filedialog, messagebox
-import tkinter as tk
-import textwrap
 import os
-from util import is_windows
-import PySide2
+import multiprocessing as mp
+from PySide2.QtWidgets import (
+    QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
+    QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem, QMessageBox)
+from PySide2.QtCore import Signal, Slot, Qt, QCoreApplication
 import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
-import multiprocessing as mp
-from util import filetype, find_sequences, duration_to_str, sequences_to_str
+from util import (
+    filetype, find_sequences, duration_to_str, sequences_to_str,
+    is_windows, platform_messagebox, retry_cancel)
 import algos.fileparse as fileparse
 import gui
-import gui.prompts as prompts
-import gui.hdpi as hdpi
 import gui.carousel as carousel
+matplotlib.use('Qt5Agg')
 
 # Need to define graphing functions at top level in order to be "pickle-able" for multiprocessing.
 # See https://stackoverflow.com/questions/8804830/python-multiprocessing-picklingerror-cant-pickle-type-function.
@@ -40,22 +39,23 @@ def atomic_subprocess(obj, subprocess_attrname, target, args):
         setattr(obj, subprocess_attrname, new_subprocess)
         new_subprocess.start()
 
-class FilePicker(ttk.Frame):
+class FilePicker(QGridLayout):
     MAX_DISPLAY_LEN = 70
 
-    def __init__(self, master, file_label, file_type, label_text, button_text='Browse', msg_detail=''):
-        super().__init__(master)
+    def __init__(self, file_label, file_type, label_text, button_text='Browse', msg_detail=''):
+        super().__init__()
         self.filepath = None
-        self.label_variable = tk.StringVar(value=label_text)
 
         self.file_label = file_label
         self.file_type = file_type
         self.msg_detail = msg_detail
 
-        picker_button = hdpi.Button(self, text=button_text, command=self.on_click_picker)
-        picker_label = ttk.Label(self, textvariable=self.label_variable)
-        picker_button.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING), pady=gui.PADDING)
-        picker_label.grid(row=0, column=1, sticky=tk.W, pady=gui.PADDING)
+        picker_button = QPushButton(button_text)
+        picker_button.clicked.connect(self.on_click_picker)
+        picker_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        self.picker_label = QLabel(label_text)
+        self.addWidget(picker_button, 0, 0)
+        self.addWidget(self.picker_label, 0, 1)
 
     def on_click_picker(self):
         filepath = self.prompt_filepath()
@@ -64,30 +64,28 @@ class FilePicker(ttk.Frame):
             self.filepath = filepath
 
     def set_filepath_label(self, filepath):
-        self.file_variable = filepath
         _, filename = os.path.split(filepath)
         if len(filename) > FilePicker.MAX_DISPLAY_LEN:
-            slice_len = FilePicker.MAX_DISPLAY_LEN//2
+            slice_len = FilePicker.MAX_DISPLAY_LEN // 2
             filename = f'{filename[:slice_len].strip()} ... {filename[-slice_len:].strip()}'
-        self.label_variable.set(filename)
+        self.picker_label.setText(filename)
         
     def prompt_filepath(self):
         file_picked = False
         while not file_picked:
             try:
                 detail_str = f' {self.msg_detail}' if len(self.msg_detail) > 0 else ''
-                platform_file_label = f'{self.file_label} ({self.file_type})' if is_windows() else self.file_label
-                path = filedialog.askopenfilename(
-                    title=f'Select a {self.file_label} file. {detail_str}',
-                    filetypes=[(platform_file_label, self.file_type)])
+                platform_file_label = f'{self.file_label} (.{self.file_type})' if is_windows() else self.file_label
+                path, _ = QFileDialog.getOpenFileName(
+                    None, f'Select a {self.file_label} file. {detail_str}',
+                    '', f'{self.file_label} (*{self.file_type})')
                 if not path:
                     return None
                 handle = open(path, 'r') # Check that file is openable
                 file_picked = True
             except IOError as err:
-                should_retry = messagebox.askretrycancel(
-                    title='Unable to open file',
-                    message=f'Error while opening {self.file_label} file. {err.strerror}.')
+                should_retry = retry_cancel(
+                    text=f'Error while opening {self.file_label} file.', informative=f'{err.strerror}.')
                 if not should_retry:
                     return None
         handle.close()
@@ -97,24 +95,20 @@ class FilePicker(ttk.Frame):
         return self.filepath
 
 class CAFilePicker(FilePicker):
-    def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
-        super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
+    def __init__(self, file_label, file_type, label_text, button_text, msg_detail=''):
+        super().__init__(file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_data = None
 
-        self.parsed_frame = ttk.Frame(self)
-        self.parsed_message = tk.StringVar()
-        parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
-        button_frame = ttk.Frame(self.parsed_frame)
-        current_button = hdpi.Button(button_frame, text='View mA vs. t', command=self.on_click_current)
-        resistance_button = hdpi.Button(button_frame, text='View kΩ vs. t', command=self.on_click_resistance)
+        self.parsed_container = QHBoxLayout()
+        self.parsed_label = QLabel()
+        current_button = QPushButton(text='View mA vs. t')
+        current_button.clicked.connect(self.on_click_current)
+        resistance_button = QPushButton(text='View kΩ vs. t')
+        resistance_button.clicked.connect(self.on_click_resistance)
 
-        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING))
-        button_frame.grid(row=0, column=1, sticky=tk.E)
-        current_button.grid(row=0, column=0, sticky=tk.E)
-        resistance_button.grid(row=0, column=1, sticky=tk.E, padx=(gui.PADDING * 2, 0))
-        
-        self.parsed_frame.columnconfigure(1, weight=1)
-        self.columnconfigure(1, weight=1)
+        self.parsed_container.addWidget(self.parsed_label)
+        self.parsed_container.addWidget(current_button)
+        self.parsed_container.addWidget(resistance_button)
     
     def on_click_current(self):
         data = self.parsed_data['current_vs_time']
@@ -139,11 +133,12 @@ class CAFilePicker(FilePicker):
 
             time_diff = parsed_data['current_vs_time'][-1][0] - parsed_data['current_vs_time'][0][0]
             potentials = parsed_data['potentials_by_trial']
-            self.parsed_message.set(textwrap.dedent(f"""\
-                Found cyclic amperometry data with
-                total duration {duration_to_str(time_diff)}
-                spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."""))
-            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, gui.PADDING))
+            self.parsed_label.setText((f"\
+                Found cyclic amperometry data with "
+                f"total duration {duration_to_str(time_diff)} "
+                f"spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."))
+            if self.parsed_container not in self.children():
+                self.addLayout(self.parsed_container, 1, 1)
 
     def prompt_filepath(self):
         valid_file_picked = False
@@ -156,33 +151,28 @@ class CAFilePicker(FilePicker):
                 parsed_data = fileparse.CA.parse_file(filepath)
                 valid_file_picked = True
             except Exception: # Fails safely for CA files with improper meta or data format
-                should_retry = prompts.retrycancel(
-                    title='Error while reading file', message='CA file is not properly formatted.',
-                    style=prompts.ERROR)
+                should_retry = retry_cancel(
+                    text='Error while reading file', informative='CA file is not properly formatted.')
                 if not should_retry:
                     return (None, None)
-
+            
         return (filepath, parsed_data)
 
     def get_parsed_input(self):
         return self.parsed_data
 
 class GCFilePicker(FilePicker):
-    def __init__(self, master, file_label, file_type, label_text, button_text, msg_detail=''):
-        super().__init__(master, file_label, file_type, label_text, button_text, msg_detail)
+    def __init__(self, file_label, file_type, label_text, button_text, msg_detail=''):
+        super().__init__(file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_list = None
         self.file_label = file_label
 
-        self.parsed_frame = ttk.Frame(self)
-        self.parsed_message = tk.StringVar()
-        parsed_label = ttk.Label(self.parsed_frame, textvariable=self.parsed_message)
-        view_button = hdpi.Button(self.parsed_frame, text='View mV vs. t', command=self.on_click_view)
-
-        parsed_label.grid(row=0, column=0, sticky=tk.W, padx=(0, gui.PADDING))
-        view_button.grid(row=0, column=1, sticky=tk.E)
-        
-        self.parsed_frame.columnconfigure(1, weight=1)
-        self.columnconfigure(1, weight=1)
+        self.parsed_container = QHBoxLayout()
+        self.parsed_label = QLabel()
+        view_button = QPushButton(text='View mV vs. t')
+        view_button.clicked.connect(self.on_click_view)
+        self.parsed_container.addWidget(self.parsed_label)
+        self.parsed_container.addWidget(view_button)
 
     def on_click_view(self):
         atomic_subprocess(
@@ -200,10 +190,11 @@ class GCFilePicker(FilePicker):
 
             self.set_filepath_label(filepath)
             mean_duration = np.mean([injection['x'][-1] for _, injection in parsed_list.items()])
-            self.parsed_message.set(textwrap.dedent(f"""\
-                Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)}
-                and mean duration {duration_to_str(mean_duration)}."""))
-            self.parsed_frame.grid(column=1, sticky=tk.W+tk.E, pady=(0, gui.PADDING))
+            self.parsed_label.setText((f"\
+                Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)} "
+                f"and mean duration {duration_to_str(mean_duration)}."))
+            if self.parsed_container not in self.children():
+                self.addLayout(self.parsed_container, 1, 1)
     
     def prompt_filepath(self):
         valid_file_picked = False
@@ -213,18 +204,22 @@ class GCFilePicker(FilePicker):
                 return (None, None, None)
         
             result = GCFilePicker.get_parsed_list(filepath)
-            parsed_list, error_message, sequences = (result.get('parsed_list'), result.get('error_message'), result.get('sequences'))
+            parsed_list, sequences, recoverable = (result.get('parsed_list'), result.get('sequences'), result.get('recoverable'))
+            error_text, error_informative, error_detailed = (result.get('error_text'), result.get('error_informative'), result.get('error_detailed'))
             if not parsed_list: # If no list, then we failed, so need to re-pick
-                should_retry = prompts.retrycancel(
-                    title='Error while reading file list', message=error_message, style=prompts.ERROR)
+                should_retry = retry_cancel(
+                    text=error_text, informative=error_informative, detailed=error_detailed)
                 if not should_retry:
                     return (None, None, None)
-            elif error_message: # If list exists but there is an error message, it's just a warning (re-pick optional)
-                response = prompts.abortretryignore(
-                    title='Missing injection files', message=error_message, style=prompts.WARNING)
-                if response is None: # User elected to abort
+            elif error_text: # If list exists but there is an error message, it's just a warning (re-pick optional)
+                messagebox = platform_messagebox(
+                    text=error_text, buttons=QMessageBox.Abort | QMessageBox.Retry | QMessageBox.Ignore,
+                    default_button=QMessageBox.Retry, icon=QMessageBox.Warning,
+                    informative=error_informative, detailed=error_detailed)
+                response = messagebox.exec()
+                if response == QMessageBox.Abort:
                     return (None, None, None)
-                elif response: # User elected to retry
+                elif response == QMessageBox.Retry:
                     continue
                 else:
                     valid_file_picked = True
@@ -240,36 +235,42 @@ class GCFilePicker(FilePicker):
     def get_parsed_list(injection_file):
         raw_list = fileparse.GC.find_list(injection_file)
         if not raw_list:
-            error_message = 'Invalid file chosen. Ensure that the filename ends with "<injection_number>.asc".'
-            return {'error_message': error_message}
+            return {
+                'error_text': 'The chosen file has an invalid name.',
+                'error_informative': 'Ensure that the filename ends with "<injection_number>.asc".'
+            }
         
         # Alert the user of any potentially missing injections
         sequences = find_sequences([*raw_list])
         first_injection = sequences[0][0]
         next_highest = sequences[1][0] if len(sequences) > 1 else None
-        missing_list = ['Missing files detected.']
+        missing_list = []
         if next_highest:
             missing_list.append((f'Found injection {next_highest} after contiguous run '
                                 f'of injections {first_injection} through {sequences[0][1]}.'))
         if first_injection > 1:
-            missing_list.append(f'Injection {first_injection} was first found. Expected injection 1.')
-        error_message = '\n'.join(missing_list) if next_highest or first_injection > 1 else None
+            missing_list.append(f'Injection {first_injection} was first found; expected injection 1.')
+        if next_highest or first_injection > 1:
+            error_text = 'Some injection files are missing.'
+            error_detailed = '\n'.join(missing_list)
+        else:
+            error_text = error_detailed = None
         
         parsed_list = fileparse.GC.parse_list(raw_list)
         if not isinstance(parsed_list, dict):
             io_fail_index = parsed_list
-            error_message = f'File read failed for injection {io_fail_index}.'
-            return {'error_message': error_message}
+            return {'error_text': f'File read failed for injection {io_fail_index}.'}
         
         return {
             'parsed_list': parsed_list,
-            'error_message': error_message,
+            'error_text': error_text,
+            'error_detailed': error_detailed,
             'sequences': sequences
         }
 
-class FileList(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+class FileList(QVBoxLayout):
+    def __init__(self):
+        super().__init__()
 
         self.file_pickers = {}
         file_labels = ['FID', 'TCD', 'CA']
@@ -286,11 +287,9 @@ class FileList(ttk.Frame):
                 instance = CAFilePicker
 
             self.file_pickers[file_label] = instance(
-                self, button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
+                button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
                 msg_detail=msg_detail, label_text=label_text)
-            self.file_pickers[file_label].grid(sticky=tk.W+tk.E)
-        
-        self.columnconfigure(0, weight=1)
-    
+            self.addLayout(self.file_pickers[file_label])
+            
     def get_parsed_input(self):
         return { key: val.get_parsed_input() for key, val in self.file_pickers.items() }

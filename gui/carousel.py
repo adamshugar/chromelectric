@@ -1,15 +1,12 @@
-import PySide2
 from PySide2.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QStyle, QStyleFactory,
-    QLineEdit, QLabel, QSizePolicy)
-import PySide2.QtCore as QtCore
-from PySide2.QtCore import Signal, Slot
-from PySide2.QtGui import QIcon, QFont, QIntValidator
+    QHBoxLayout, QPushButton, QLineEdit, QLabel)
+from PySide2.QtCore import Signal, Slot, Qt
+from PySide2.QtGui import QFont, QIntValidator
 import matplotlib
-# matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+matplotlib.use('Qt5Agg')
 
 class ApplicationWindow(QMainWindow):
     def __init__(self, graph_list, window_title, index_title, xlabel, ylabel):
@@ -24,19 +21,19 @@ class ApplicationWindow(QMainWindow):
         self.xlabel = xlabel
         self.ylabel = ylabel
 
-        # self.canvas = FigureCanvas(Figure())
-        # self.layout.addWidget(self.canvas)
-        # self.toolbar = NavigationToolbar(self.canvas, self)
-        # self.addToolBar(self.toolbar)
+        self.canvas = FigureCanvas(Figure())
+        self.layout.addWidget(self.canvas)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.addToolBar(self.toolbar)
 
-        # pages = [int(page) for page in self.graph_list]
-        # pages.sort()
-        # pagination = Pagination(pages, handle_page_change=lambda _, new_page: print('hi'))
-        # self.layout.addLayout(pagination)
+        pages = [int(page) for page in self.graph_list]
+        pages.sort()
+        pagination = Pagination(pages, handle_page_change=lambda _, new_page: self.graph_index(new_page))
+        self.layout.addLayout(pagination)
 
-        # self.axes = self.canvas.figure.add_subplot()
-        # self.curr_plot = None
-        # self.graph_index(1)
+        self.axes = self.canvas.figure.add_subplot()
+        self.curr_plot = None
+        self.graph_index(pages[0])
 
     def graph_index(self, index):
         self.axes.clear()
@@ -47,7 +44,7 @@ class ApplicationWindow(QMainWindow):
         self.toolbar.update()
         self.canvas.draw()
 
-    def add_index(self, index):
+    def overlay_index(self, index):
         pass
 
 class PushButton(QPushButton):
@@ -84,7 +81,7 @@ class Pagination(QVBoxLayout):
         self.jump_container = QVBoxLayout()
         self.jump_button = PushButton(text='Go')
         self.jump_entry = QLineEdit()
-        self.jump_entry.setAlignment(QtCore.Qt.AlignHCenter)
+        self.jump_entry.setAlignment(Qt.AlignHCenter)
         self.jump_entry.setFixedWidth(80)
         self.jump_entry.setMaxLength(5)
         entry_font = self.jump_entry.font()
@@ -92,19 +89,19 @@ class Pagination(QVBoxLayout):
         self.jump_entry.setFont(entry_font)
         self.jump_entry.setValidator(QIntValidator(min(pages), max(pages)))
         self.jump_button.clicked.connect(self.handle_jump_click)
-        self.jump_container.addWidget(self.jump_entry, alignment=QtCore.Qt.AlignHCenter)
-        self.jump_container.addWidget(self.jump_button, alignment=QtCore.Qt.AlignHCenter)
+        self.jump_container.addWidget(self.jump_entry, alignment=Qt.AlignHCenter)
+        self.jump_container.addWidget(self.jump_button, alignment=Qt.AlignHCenter)
 
         # Initialize overall layout
-        self.controls_container.addWidget(self.prev_button, alignment=QtCore.Qt.AlignTop|QtCore.Qt.AlignRight)
-        self.controls_container.addLayout(self.jump_container, alignment=QtCore.Qt.AlignTop|QtCore.Qt.AlignHCenter)
-        self.controls_container.addWidget(self.next_button, alignment=QtCore.Qt.AlignTop|QtCore.Qt.AlignLeft)
+        self.controls_container.addWidget(self.prev_button, alignment=Qt.AlignTop | Qt.AlignRight)
+        self.controls_container.addLayout(self.jump_container, alignment=Qt.AlignTop | Qt.AlignHCenter)
+        self.controls_container.addWidget(self.next_button, alignment=Qt.AlignTop | Qt.AlignLeft)
         self.controls_container.setStretchFactor(self.prev_button, 1)
         self.controls_container.setStretchFactor(self.next_button, 1)
 
         self.indicator = PageIndicator(pages, start_index)
-        self.addLayout(self.indicator, alignment=QtCore.Qt.AlignHCenter)
-        self.addLayout(self.controls_container, alignment=QtCore.Qt.AlignHCenter)
+        self.addLayout(self.indicator, alignment=Qt.AlignHCenter)
+        self.addLayout(self.controls_container, alignment=Qt.AlignHCenter)
 
     @property
     def curr_index(self):
@@ -157,9 +154,9 @@ class PageIndicator(QHBoxLayout):
         for _ in range(5):
             label = QLabel('')
             label.setFixedWidth(20)
-            label.setAlignment(QtCore.Qt.AlignCenter)
+            label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)
-            self.addWidget(label, alignment=QtCore.Qt.AlignCenter)
+            self.addWidget(label, alignment=Qt.AlignCenter)
         self.addStretch(1)
         self.set_index(start_index)
 
@@ -179,7 +176,7 @@ class PageIndicator(QHBoxLayout):
         font.setWeight(QFont.DemiBold)
         self.labels[2].setFont(font)
     
-    def set_index(self, index, should_resize=False):
+    def set_index(self, index):
         text_vals = [str(self.pages[index]) if 0 <= index < len(self.pages) else '' for index in range(index - 2, index + 3)]
         for index, val in enumerate(text_vals):
             self.labels[index].setText(val)

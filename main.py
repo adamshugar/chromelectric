@@ -1,22 +1,26 @@
-from PySide2.QtWidgets import (
-    QApplication, QMainWindow, QWidget,
-    QVBoxLayout, QLayout, QCheckBox)
-from PySide2.QtCore import Slot
 import multiprocessing as mp
 import json
 import sys
 import os
+from PySide2.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QSizePolicy,
+    QVBoxLayout, QLayout, QCheckBox, QPushButton,
+    QTabWidget, QSpacerItem, QMessageBox)
+from PySide2.QtCore import Slot, Qt, QCoreApplication
+import gui
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
+from gui.filepick import FileList
+from util import platform_messagebox
 
 class GeneralParams(QVBoxLayout):
     SETTINGS_FILE_NAME = 'chromelectric_settings.txt'
     SETTINGS_PATH = os.path.join(sys.path[0], SETTINGS_FILE_NAME)
 
-    def __init__(self, resize_handler, padx=0, pady=0):
+    def __init__(self, resize_handler):
         super().__init__()
 
         self.setSizeConstraint(QLayout.SetFixedSize)
-        saved_settings = self.load()
+        saved_settings = GeneralParams.load_settings()
 
         self.gas_list = GasList(resize_handler, saved_settings=saved_settings)
         self.addLayout(self.gas_list)
@@ -27,10 +31,14 @@ class GeneralParams(QVBoxLayout):
         self.checkbox_list = CheckboxList(saved_settings=saved_settings)
         self.addLayout(self.checkbox_list)
 
-        self.save_checkbox = QCheckBox('Save all above parameters for future runs')
-        self.addWidget(self.save_checkbox)
+        self.addItem(QSpacerItem(1, gui.PADDING))
 
-    def load(self):
+        self.save_checkbox = QCheckBox('Save all above parameters for future runs')
+        self.save_checkbox.setChecked(True)
+        self.addWidget(self.save_checkbox, 0, Qt.AlignCenter)
+
+    @staticmethod
+    def load_settings():
         try:
             file = open(GeneralParams.SETTINGS_PATH, 'r')
             settings = json.load(file)
@@ -38,10 +46,10 @@ class GeneralParams(QVBoxLayout):
         except IOError:
             return None # File won't exist on first program run
 
-    def save(self):
+    def save_settings(self):
         if not self.save_checkbox.isChecked():
             return
-        
+
         settings = {
             **self.gas_list.get_parsed_input(),
             **self.short_entry_list.get_parsed_input(),
@@ -51,39 +59,33 @@ class GeneralParams(QVBoxLayout):
             settings_handle = open(GeneralParams.SETTINGS_PATH, 'w')
             json.dump(settings, settings_handle, indent=4)
         except IOError as err:
-            pass
-            # messagebox.showwarning(
-            #     'Unable to save settings',
-            #     f'Error while saving to settings file. {err.strerror}.')
+            warning = platform_messagebox(
+                text='Unable to save settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
+                informative=f'Error while saving to settings file: {err.strerror}.')
+            warning.exec()
+    
+class FileAnalysis(QVBoxLayout):
+    def __init__(self, on_click_analysis, resize_handler):
+        super().__init__()
 
-# class FileAnalysis(ttk.Frame):
-#     def __init__(self, master, padx=0, pady=0, min_width=None, on_click_analysis=None):
-#         super().__init__(master)
+        self.addLayout(FileList())
 
-#         container = ttk.Frame(self)
-#         container.grid(padx=padx, pady=pady)
+        self.on_click_analysis = on_click_analysis
+        analysis_button = QPushButton(text='Integrate')
+        analysis_button.clicked.connect(self.handle_click_analysis)
+        analysis_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        self.addWidget(analysis_button, alignment=Qt.AlignRight)
 
-#         # Dummy min width enforcer widget
-#         ttk.Frame(container, width=min_width).grid()
-
-#         self.file_list = FileList(container)
-#         self.file_list.grid(sticky=tk.W+tk.E)
-
-#         self.on_click_analysis = on_click_analysis
-#         analysis_button = hdpi.Button(container, text='Integrate', command=self.handle_click_analysis)
-#         analysis_button.grid(sticky=tk.E, pady=(pady, 0))
-
-#     def handle_click_analysis(self):
-#         if self.on_click_analysis:
-#             self.on_click_analysis()
-#         # TODO: Launch integration subprocess
+    def handle_click_analysis(self):
+        if self.on_click_analysis:
+            self.on_click_analysis()
 
 class ApplicationWindow(QMainWindow):
     PADX, PADY = (50, 40)
 
-    def __init__(self, window_title='Chromelectric'):
+    def __init__(self):
         super().__init__()
-        self.setWindowTitle(window_title)
+        self.setWindowTitle(QCoreApplication.applicationName())
 
         self.main = QWidget()
         self.setCentralWidget(self.main)
@@ -91,32 +93,35 @@ class ApplicationWindow(QMainWindow):
         self.layout.setSizeConstraint(QLayout.SetFixedSize)
         self.layout.setContentsMargins(
             ApplicationWindow.PADX, ApplicationWindow.PADY, ApplicationWindow.PADX, ApplicationWindow.PADY)
+        self.tabs = QTabWidget()
+        self.layout.addWidget(self.tabs)
 
+        self.params_container = QWidget()
         self.general_params = GeneralParams(resize_handler=self.resize)
-        self.layout.addLayout(self.general_params)
+        self.params_container.setLayout(self.general_params)
+        self.tabs.addTab(self.params_container, 'General Parameters')
 
-        # self.file_analysis = FileAnalysis(
-        #     self.notebook, padx=padx, pady=pady, on_click_analysis=self.handle_click_analysis,
-        #     min_width=Application.get_largest_width())
-        # general_params_name = 'General Parameters' if not is_windows() else ' General Parameters '
-        # file_analysis_name = 'File Analysis' if not is_windows() else ' File Analysis '
-        # self.tabs_by_name = {
-        #     general_params_name: self.general_params,
-        #     file_analysis_name: self.file_analysis,
-        # }
-        # self.notebook.setup(self.tabs_by_name, first_tab=general_params_name)
-        # self.notebook.grid()
+        self.file_analysis = QWidget()
+        self.file_analysis.setLayout(
+            FileAnalysis(on_click_analysis=self.handle_click_analysis, resize_handler=self.resize))
+        self.tabs.addTab(self.file_analysis, 'File Analysis')
         
         self.resize()
 
     @Slot()
     def resize(self):
         QApplication.instance().processEvents()
+        self.tabs.setFixedSize(self.tabs.sizeHint())
+        self.layout.activate()
         self.setFixedSize(self.sizeHint())
+
+    def handle_click_analysis(self):
+        print('Saving settings (TEMP)')
+        self.general_params.save_settings()
 
 def main():
     qapp = QApplication([''])
-    dpi = QApplication.instance().primaryScreen().logicalDotsPerInch()
+    QCoreApplication.setApplicationName('Chromelectric')
     app = ApplicationWindow()
     app.show()
     qapp.exec_()

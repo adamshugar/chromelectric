@@ -1,7 +1,7 @@
 """ Basic utility functions. """
 import re
 import sys
-from PySide2.QtWidgets import QApplication
+from PySide2.QtWidgets import QApplication, QMessageBox
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -73,6 +73,30 @@ class QtPt:
         if font.pixelSize() != -1:
             return font.pixelSize()
         return QtPt.pt_to_px(font.pointSize())
+
+def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed=''):
+    messagebox = QMessageBox()
+    messagebox.setIcon(icon)
+    messagebox.setStandardButtons(buttons)
+    messagebox.setDefaultButton(default_button)
+    if is_windows():
+        messagebox.setWindowTitle(QCoreApplication.applicationName())
+        messagebox.setText(text + informative)
+        if detailed:
+            messagebox.setDetailedText(detailed)
+    else:
+        messagebox.setText(text)
+        if informative:
+            messagebox.setInformativeText(informative)
+        if detailed:
+            messagebox.setDetailedText(detailed)
+    return messagebox
+
+def retry_cancel(text, informative='', detailed='', icon=QMessageBox.Critical):
+    messagebox = platform_messagebox(
+        text=text, buttons=QMessageBox.Cancel | QMessageBox.Retry, default_button=QMessageBox.Retry,
+        icon=icon, informative=informative, detailed=detailed)
+    return messagebox.exec() == QMessageBox.Retry
 
 class filetype:
     GC = 'asc'

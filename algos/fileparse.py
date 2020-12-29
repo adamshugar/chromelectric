@@ -1,7 +1,7 @@
-import numpy as np
 from datetime import datetime
 import re
 import os
+import numpy as np
 from util import filetype
 
 # Using classes in this module purely as additional namespaces; all methods are static

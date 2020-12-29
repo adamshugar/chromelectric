@@ -11,6 +11,8 @@ lib/
 
 # VS Code
 .vscode/
+settings.json
+.pylintrc
 
 # Generated files
 chromelectric_settings.txt

@@ -1,27 +1,27 @@
-from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, QtPt
 from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame,
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem)
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QValidator
+from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, QtPt
 import gui
 
 class MinMaxValidator(QValidator):
-    def __init__(self, parent, row_object):
+    def __init__(self, parent, _):
         super().__init__(parent)
 
     def validate(self, final_text, _):
         if not final_text or is_nonnegative_int(final_text):
             return QValidator.Acceptable
         return QValidator.Invalid
-    
+
     @staticmethod
     def on_focus_out(row_object, _):
         try:
             min_val = int(row_object.min_input.text())
             max_val = int(row_object.max_input.text())
             name = 'bounds_error_label'
-            row_object.toggle_error_label(min_val >= max_val, name, GasRow.ERRORS_BY_LABEL[name])
+            row_object.toggle_error_label(min_val >= max_val, name)
         except ValueError:
             pass # Only toggle error label if both values are populated
 
@@ -38,7 +38,7 @@ class CalibValidator(QValidator):
     @staticmethod
     def on_focus_out(row_object, text):
         name = 'calib_error_label'
-        row_object.toggle_error_label(float(text) == 0, name, GasRow.ERRORS_BY_LABEL[name])
+        row_object.toggle_error_label(safe_float(text) == 0, name)
 
 class LineEdit(QLineEdit):
     def __init__(
@@ -66,7 +66,7 @@ class LineEdit(QLineEdit):
         if hasattr(self, 'validator_class'):
             self.validator_class.on_focus_out(self.row_object, self.text())
 
-# Intentionally does not subclass a QLayout so that all GasRow objects can share the same QGridLayout
+# Intentionally does not subclass QLayout so that all GasRow objects can share the same QGridLayout
 class GasRow:
     ERRORS_BY_LABEL = {
         'bounds_error_label': 'Maximum must be greater than minimum.',
@@ -82,10 +82,9 @@ class GasRow:
 
         self.columns = []
         number_label = QLabel(text=f'{row_number + 1}.')
-        font = number_label.font()
         self.columns.append(number_label)
-        self.parent.addWidget(number_label, self.base_row, 0, Qt.AlignRight)
-        
+        self.parent.addWidget(number_label, self.base_row, 0, Qt.AlignLeft)
+
         # Widths are in characters
         field_types = {
             'string': {
@@ -128,7 +127,10 @@ class GasRow:
             self.parent.addWidget(curr_label, self.base_row + index + 1, 1, 1, GasList.NUM_FIELDS + 1)
             curr_label.hide()
 
-    def toggle_error_label(self, condition, name, message):
+        self.line_edits = line_edits
+        self.channel_selector = channel_selector
+
+    def toggle_error_label(self, condition, name):
         if condition:
             getattr(self, name).show()
         else:
@@ -155,6 +157,7 @@ class GasList(QGridLayout):
     def __init__(self, resize_handler, saved_settings=None):
         super().__init__()
         self.setHorizontalSpacing(gui.PADDING)
+        self.setVerticalSpacing(gui.PADDING // 3)
         self.setSizeConstraint(QLayout.SetFixedSize)
         self.resize_requested.connect(resize_handler)
 
@@ -181,6 +184,7 @@ class GasList(QGridLayout):
         add_button_base = GasRow.INTERNAL_ROWS_PER_OBJ * GasList.MAX_GAS_COUNT
         self.add_row_button = QPushButton(text='Add Gas')
         self.add_row_button.clicked.connect(self.show_next_row)
+        self.addItem(QSpacerItem(1, gui.PADDING // 3), add_button_base, 0)
         self.addWidget(self.add_row_button, add_button_base + 1, 0, 1, GasList.NUM_FIELDS + 1, Qt.AlignCenter)
         self.add_row_button.setSizePolicy(QSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred))
 
@@ -188,7 +192,7 @@ class GasList(QGridLayout):
         self.gas_list.append(GasRow(
             parent=self, header_row_count=1, row_number=len(self.gas_list),
             initial_vals=initial_vals, resize_signal=self.resize_requested))
-        
+
     @Slot()
     def show_next_row(self, _):
         if self.visible_rows < GasList.MAX_GAS_COUNT:
@@ -197,11 +201,12 @@ class GasList(QGridLayout):
         if self.visible_rows == GasList.MAX_GAS_COUNT:
             self.add_row_button.hide()
             self.resize_requested.emit()
-        
+
     def get_parsed_input(self):
         result = { GasList.SETTINGS_ID: {}, 'duplicates': [] }
         for gas in self.gas_list:
-            name, retention_min_str, retention_max_str, calib_val_str, channel = [input_field.text() for input_field in gas]
+            name, retention_min_str, retention_max_str, calib_val_str = [line_edit.text() for line_edit in gas.line_edits]
+            channel = gas.channel_selector.currentText()
 
             calib_val = safe_float(calib_val_str)
             # Assume if min is blank 0 is intended and if max is blank end of GC run is intended
@@ -210,7 +215,7 @@ class GasList(QGridLayout):
 
             if not name or not calib_val: # Calibration value must be greater than zero
                 continue
-            
+
             if name in result[GasList.SETTINGS_ID]:
                 result['duplicates'].append(name)
             result[GasList.SETTINGS_ID][name] = {
@@ -224,24 +229,27 @@ class GasList(QGridLayout):
 
         return result
 
-# Intentionally does not subclass QLayout so that all ShortEntry objects can share the same grid layout
+# Intentionally does not subclass QLayout so that all ShortEntry objects can share same grid layout
 class ShortEntry:
     def __init__(
         self, parent, row, before_text, after_text, initial_text,
         validator_instance, col_offset=0):
         before_text = QLabel(before_text)
-        entry = LineEdit(
+        self.entry = LineEdit(
             width=gui.FLOAT_WIDTH, max_width=gui.FLOAT_WIDTH,
             alignment=Qt.AlignRight, initial_text=initial_text, validator_instance=validator_instance)
         after_text = QLabel(' ' + after_text)
 
         parent.addWidget(before_text, row, col_offset + 0)
-        parent.addWidget(entry, row, col_offset + 1)
+        parent.addWidget(self.entry, row, col_offset + 1)
         parent.addWidget(after_text, row, col_offset + 2)
+    
+    def get_input_ref(self):
+        return self.entry
 
 class QHLine(QFrame):
     def __init__(self):
-        super(QHLine, self).__init__()
+        super().__init__()
         self.setFrameShape(QFrame.HLine)
         self.setFrameShadow(QFrame.Sunken)
 
@@ -253,7 +261,7 @@ class NamedDivider(QHBoxLayout):
         self.addWidget(QHLine(), Qt.AlignCenter)
 
 class CheckboxList(QVBoxLayout):
-    def __init__(self, saved_settings={}):
+    def __init__(self, saved_settings):
         super().__init__()
 
         self.checkbutton_fields = {
@@ -268,25 +276,28 @@ class CheckboxList(QVBoxLayout):
             'fe_total': {
                 'label': 'Include total Faradaic efficiency in plot',
                 'default': False,
-                'indent': gui.PADDING * 5
+                'indent': gui.PADDING
             },
         }
 
         if not isinstance(saved_settings, dict):
             saved_settings = {}
 
-        # self.addItem(QSpacerItem(0, gui.PADDING), add_button_base, 0, 1, GasList.NUM_FIELDS + 1)
         self.addLayout(NamedDivider(name='Additional output parameters'))
-        # div.grid(pady=(0, gui.PADDING * 3), sticky=tk.E+tk.W)
-        
-        base_indent = gui.PADDING * 5
+        base_indent = gui.PADDING * 2
         for name, attrs in self.checkbutton_fields.items():
+            curr_row = QHBoxLayout()
+
+            total_indent = base_indent + (attrs.get('indent') if attrs.get('indent') else 0)
+            curr_row.addItem(QSpacerItem(total_indent, 1))
+
             checkbox = QCheckBox(attrs['label'])
-            self.addWidget(checkbox)
+            curr_row.addWidget(checkbox)
             bool_checked = saved_settings[name] if name in saved_settings else self.checkbutton_fields[name]['default']
             checkbox.setCheckState(Qt.Checked if bool_checked else Qt.Unchecked)
             attrs['ref'] = checkbox
-            indent = attrs.get('indent') if attrs.get('indent') else 0
+
+            self.addLayout(curr_row)
 
         self.checkbutton_fields['plot_fe']['ref'].clicked.connect(self.toggle_disable_fe_total)
 
@@ -306,7 +317,7 @@ class GenericValidator(QValidator):
         return QValidator.Acceptable if self.validator(final_text) else QValidator.Invalid
 
 class ShortEntryList(QGridLayout):
-    def __init__(self, saved_settings={}):
+    def __init__(self, saved_settings):
         super().__init__()
 
         self.fe_params = {
@@ -365,9 +376,10 @@ class ShortEntryList(QGridLayout):
             initial_text = saved_settings[field_name] if field_name in saved_settings else ''
             validation = any_float_validation if field_attrs.get('allow_negative') else nonnegative_float_validation
             self.addItem(QSpacerItem(indent, 1), self.curr_row, 0)
-            ShortEntry(
+            short_entry = ShortEntry(
                 self, row=self.curr_row + index, before_text=field_attrs['before_text'], after_text=field_attrs['after_text'],
                 initial_text=initial_text, validator_instance=validation, col_offset=1)
+            field_attrs['ref'] = short_entry.get_input_ref()
             self.addItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum), self.curr_row, 4)
             self.curr_row += len(entry_dict)
 
@@ -375,5 +387,5 @@ class ShortEntryList(QGridLayout):
         result = {}
         entry_list = {**self.fe_params, **self.v_correction_params}
         for entry, attributes in entry_list.items():
-            result[entry] = safe_float(attributes['var'].get())
+            result[entry] = safe_float(attributes['ref'].text())
         return result
