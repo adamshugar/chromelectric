@@ -27,8 +27,8 @@ def single_graph(title, x, y, xlabel, ylabel):
     ax.set_ylabel(ylabel)
     plt.show()
 
-def carousel_graph(graph_list, window_title, index_title, xlabel, ylabel):
-    carousel.launch_window(graph_list, window_title, index_title, xlabel, ylabel)
+def carousel_graph(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
+    carousel.launch_window(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
 
 def atomic_subprocess(obj, subprocess_attrname, target, args):
     try:
@@ -192,7 +192,8 @@ class GCFilePicker(FilePicker):
             args=(
                 self.parsed_list, f'{self.file_label} Injection List View',
                 f'Potential vs. Time for {self.file_label} ' + 'Injection {}',
-                'Time (sec)', 'Potential (mV)'))
+                f'Potential vs. Time for {self.file_label} Injections',
+                'Injection {}', 'Time (sec)', 'Potential (mV)'))
 
     def on_click_picker(self):
         filepath, parsed_list, sequences = self.prompt_filepath()

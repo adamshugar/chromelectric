@@ -8,34 +8,85 @@ from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2Q
 from matplotlib.figure import Figure
 matplotlib.use('Qt5Agg')
 
-class IntAction:
-    # Assumes `layout` is QHBoxLayout
-    def __init__(self, layout, text, min_value, max_value, on_click, insertion_index=None):
-        self.on_click = on_click
-        trigger_button = PushButton(text=text)
-        trigger_button.clicked.connect(lambda: self.handle_click())
+def launch_window(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
+    qapp = QApplication([''])
+    app = ApplicationWindow(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
+    app.show()
+    qapp.exec_()
 
-        self.input_field = QLineEdit()
-        self.input_field.setAlignment(Qt.AlignHCenter)
-        self.input_field.setFixedWidth(80)
-        self.input_field.setMaxLength(5)
-        input_field_font = self.input_field.font()
-        input_field_font.setPointSize(16)
-        self.input_field.setFont(input_field_font)
-        self.input_field.setValidator(QIntValidator(min_value, max_value))
-        
-        if insertion_index is not None:
-            layout.insertWidget(insertion_index, self.input_field, alignment=Qt.AlignHCenter)
-            layout.insertWidget(insertion_index + 1, trigger_button, alignment=Qt.AlignHCenter)
+class ApplicationWindow(QMainWindow):
+    def __init__(self, graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
+        super().__init__()
+
+        self.main = QWidget()
+        self.setCentralWidget(self.main)
+        self.layout = QGridLayout(self.main)
+        self.setWindowTitle(window_title)
+        self.index_title = index_title
+        self.multiple_title = multiple_title
+        self.legend_title = legend_title
+        self.graph_list = graph_list
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+
+        self.canvas = FigureCanvas(Figure())
+        self.layout.addWidget(self.canvas, 0, 0)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.addToolBar(self.toolbar)
+
+        pages = [int(page) for page in self.graph_list]
+        pages.sort()
+        pagination = Pagination(pages, handle_page_change=self.graph_page)
+        self.layout.addLayout(pagination, 1, 0)
+
+        init_page = pages[0]
+        self.overlay_tracker = OverlayTracker(
+            pages, init_page, self.add_page, self.remove_page, 5)
+        self.visible_pages = [init_page]
+        self.layout.addLayout(self.overlay_tracker, 0, 1)
+
+        self.axes = self.canvas.figure.add_subplot()
+        self.curr_plot = None
+        self.graph_page(page=init_page)
+
+    def graph_page(self, _=None, page=0):
+        self.overlay_tracker.clear()
+        self.overlay_tracker.set_exclude(page)
+        self.visible_pages = [page]
+
+        self.axes.clear()
+        self.axes.plot(self.graph_list[page]['x'], self.graph_list[page]['y'], label=self.legend_title.format(page))
+        self.axes.set_title(self.index_title.format(page))
+        self.axes.set_xlabel(self.xlabel)
+        self.axes.set_ylabel(self.ylabel)
+
+        self.toolbar.update()
+        self.canvas.draw()
+
+    def add_page(self, page):
+        self.visible_pages.append(page)
+        self.axes.plot(self.graph_list[page]['x'], self.graph_list[page]['y'], label=self.legend_title.format(page))
+
+        self.axes.legend()
+        self.axes.set_title(self.multiple_title)
+
+        self.toolbar.update()
+        self.canvas.draw()
+
+    def remove_page(self, page):
+        line_index = self.visible_pages.index(page)
+        self.axes.get_lines()[line_index].remove()
+        self.visible_pages.pop(line_index)
+
+        # Always refresh legend to reflect removed page; if only one page left, no need for legend
+        self.axes.get_legend().remove()
+        if len(self.visible_pages) == 1:
+            self.axes.set_title(self.index_title.format(self.visible_pages[0]))
         else:
-            layout.addWidget(self.input_field, alignment=Qt.AlignHCenter)
-            layout.addWidget(trigger_button, alignment=Qt.AlignHCenter)
+            self.axes.legend()
 
-    @Slot()
-    def handle_click(self):
-        did_succeed = self.on_click(self.input_field.text())
-        if did_succeed:
-            self.input_field.setText('')
+        self.toolbar.update()
+        self.canvas.draw()
 
 class OverlayTracker(QVBoxLayout):
     def __init__(self, pages, exclude, on_add_overlay, on_remove_overlay, max_overlays=None):
@@ -87,85 +138,6 @@ class OverlayTracker(QVBoxLayout):
     def set_exclude(self, exclude):
         # Supports convenient exclusion of single page or multiple
         self.exclude = exclude if isinstance(exclude, list) else [exclude]
-
-class ApplicationWindow(QMainWindow):
-    def __init__(self, graph_list, window_title, index_title, xlabel, ylabel):
-        super().__init__()
-
-        self.main = QWidget()
-        self.setCentralWidget(self.main)
-        self.layout = QGridLayout(self.main)
-        self.setWindowTitle(window_title)
-        self.index_title = index_title
-        self.graph_list = graph_list
-        self.xlabel = xlabel
-        self.ylabel = ylabel
-
-        self.canvas = FigureCanvas(Figure())
-        self.layout.addWidget(self.canvas, 0, 0)
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.addToolBar(self.toolbar)
-
-        pages = [int(page) for page in self.graph_list]
-        pages.sort()
-        pagination = Pagination(pages, handle_page_change=self.graph_page)
-        self.layout.addLayout(pagination, 1, 0)
-
-        init_page = pages[0]
-        self.overlay_tracker = OverlayTracker(
-            pages, init_page, self.add_page, self.remove_page, 5)
-        self.visible_pages = [init_page]
-        self.layout.addLayout(self.overlay_tracker, 0, 1)
-
-        self.axes = self.canvas.figure.add_subplot()
-        self.curr_plot = None
-        self.graph_page(page=init_page)
-
-    def graph_page(self, _=None, page=0):
-        self.overlay_tracker.clear()
-        self.overlay_tracker.set_exclude(page)
-        self.visible_pages = [page]
-
-        self.axes.clear()
-        self.axes.plot(self.graph_list[page]['x'], self.graph_list[page]['y'], label=self.index_title.format(page))
-        self.axes.set_title(self.index_title.format(page))
-        self.axes.set_xlabel(self.xlabel)
-        self.axes.set_ylabel(self.ylabel)
-
-        self.toolbar.update()
-        self.canvas.draw()
-
-    def add_page(self, page):
-        self.visible_pages.append(page)
-        self.axes.plot(self.graph_list[page]['x'], self.graph_list[page]['y'], label=self.index_title.format(page))
-
-        self.axes.legend()
-
-        self.toolbar.update()
-        self.canvas.draw()
-
-    def remove_page(self, page):
-        line_index = self.visible_pages.index(page)
-        self.axes.get_lines()[line_index].remove()
-        self.visible_pages.pop(line_index)
-
-        # Always refresh legend to reflect removed page; if only one page left, no need for legend
-        self.axes.get_legend().remove()
-        if len(self.visible_pages) > 1:
-            self.axes.legend()
-
-        self.toolbar.update()
-        self.canvas.draw()
-
-class PushButton(QPushButton):
-    def __init__(self, text, font_size=None, fixed_width=None):
-        super().__init__(text=text)
-        if fixed_width:
-            self.setFixedWidth(fixed_width)
-        if font_size:
-            font = self.font()
-            font.setPointSize(font_size)
-            self.setFont(font)
 
 class Pagination(QVBoxLayout):
     page_changed = Signal(int, int)
@@ -283,8 +255,41 @@ class PageIndicator(QHBoxLayout):
         for index, val in enumerate(text_vals):
             self.labels[index].setText(val)
 
-def launch_window(graph_list, window_title, index_title, xlabel, ylabel):
-    qapp = QApplication([''])
-    app = ApplicationWindow(graph_list, window_title, index_title, xlabel, ylabel)
-    app.show()
-    qapp.exec_()
+class IntAction:
+    # Assumes `layout` is QHBoxLayout
+    def __init__(self, layout, text, min_value, max_value, on_click, insertion_index=None):
+        self.on_click = on_click
+        trigger_button = PushButton(text=text)
+        trigger_button.clicked.connect(lambda: self.handle_click())
+
+        self.input_field = QLineEdit()
+        self.input_field.setAlignment(Qt.AlignHCenter)
+        self.input_field.setFixedWidth(80)
+        self.input_field.setMaxLength(5)
+        input_field_font = self.input_field.font()
+        input_field_font.setPointSize(16)
+        self.input_field.setFont(input_field_font)
+        self.input_field.setValidator(QIntValidator(min_value, max_value))
+        
+        if insertion_index is not None:
+            layout.insertWidget(insertion_index, self.input_field, alignment=Qt.AlignHCenter)
+            layout.insertWidget(insertion_index + 1, trigger_button, alignment=Qt.AlignHCenter)
+        else:
+            layout.addWidget(self.input_field, alignment=Qt.AlignHCenter)
+            layout.addWidget(trigger_button, alignment=Qt.AlignHCenter)
+
+    @Slot()
+    def handle_click(self):
+        did_succeed = self.on_click(self.input_field.text())
+        if did_succeed:
+            self.input_field.setText('')
+
+class PushButton(QPushButton):
+    def __init__(self, text, font_size=None, fixed_width=None):
+        super().__init__(text=text)
+        if fixed_width:
+            self.setFixedWidth(fixed_width)
+        if font_size:
+            font = self.font()
+            font.setPointSize(font_size)
+            self.setFont(font)
