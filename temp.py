@@ -14,10 +14,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
 """
-Later, if possible: test on low DPI displays and multiple monitors
-	Fix tiny Windows checkboxes and weird Notebook on Mac - really should port to PyQt or PySide
-Also multithread the GC/CA file reads so the program never freezes
-Dependencies on Ubuntu: tkinter, matplotlib, and PyQt5
+Multithread the GC/CA file reads so the program never freezes
+Dependencies on Ubuntu: matplotlib, and PyQt5
+1. Implement peak deconvolution functionality
+2. Gas overlap functionality
+3. Write documentation and freeze executables
 """
 
 # Packaging: use PyInstaller to freeze executables for Mac, Windows, Linux, and distribute via Conda
