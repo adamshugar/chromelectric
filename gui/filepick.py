@@ -1,4 +1,5 @@
 import os
+import textwrap
 import multiprocessing as mp
 from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
@@ -53,6 +54,7 @@ class FilePicker(QGridLayout):
         picker_button = QPushButton(button_text)
         picker_button.clicked.connect(self.on_click_picker)
         picker_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+
         self.picker_label = QLabel(label_text)
         self.addWidget(picker_button, 0, 0)
         self.addWidget(self.picker_label, 0, 1)
@@ -95,20 +97,25 @@ class FilePicker(QGridLayout):
         return self.filepath
 
 class CAFilePicker(FilePicker):
-    def __init__(self, file_label, file_type, label_text, button_text, msg_detail=''):
+    def __init__(self, file_label, file_type, label_text, button_text, msg_detail, resize_handler):
         super().__init__(file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_data = None
+        self.resize_handler = resize_handler
 
         self.parsed_container = QHBoxLayout()
         self.parsed_label = QLabel()
-        current_button = QPushButton(text='View mA vs. t')
-        current_button.clicked.connect(self.on_click_current)
+        self.parsed_label.setWordWrap(True)
+
         resistance_button = QPushButton(text='View kΩ vs. t')
         resistance_button.clicked.connect(self.on_click_resistance)
+        resistance_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        current_button = QPushButton(text='View mA vs. t')
+        current_button.clicked.connect(self.on_click_current)
+        current_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
 
         self.parsed_container.addWidget(self.parsed_label)
-        self.parsed_container.addWidget(current_button)
         self.parsed_container.addWidget(resistance_button)
+        self.parsed_container.addWidget(current_button)
     
     def on_click_current(self):
         data = self.parsed_data['current_vs_time']
@@ -133,12 +140,14 @@ class CAFilePicker(FilePicker):
 
             time_diff = parsed_data['current_vs_time'][-1][0] - parsed_data['current_vs_time'][0][0]
             potentials = parsed_data['potentials_by_trial']
-            self.parsed_label.setText((f"\
+            self.parsed_label.setText(textwrap.dedent((f"\
                 Found cyclic amperometry data with "
                 f"total duration {duration_to_str(time_diff)} "
-                f"spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V."))
+                f"spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V.")))
+            self.parsed_label.adjustSize()
             if self.parsed_container not in self.children():
                 self.addLayout(self.parsed_container, 1, 1)
+                self.resize_handler()
 
     def prompt_filepath(self):
         valid_file_picked = False
@@ -162,15 +171,18 @@ class CAFilePicker(FilePicker):
         return self.parsed_data
 
 class GCFilePicker(FilePicker):
-    def __init__(self, file_label, file_type, label_text, button_text, msg_detail=''):
+    def __init__(self, file_label, file_type, label_text, button_text, msg_detail, resize_handler):
         super().__init__(file_label, file_type, label_text, button_text, msg_detail)
         self.parsed_list = None
+        self.resize_handler = resize_handler
         self.file_label = file_label
 
         self.parsed_container = QHBoxLayout()
         self.parsed_label = QLabel()
+        self.parsed_label.setWordWrap(True)
         view_button = QPushButton(text='View mV vs. t')
         view_button.clicked.connect(self.on_click_view)
+        view_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
         self.parsed_container.addWidget(self.parsed_label)
         self.parsed_container.addWidget(view_button)
 
@@ -190,11 +202,13 @@ class GCFilePicker(FilePicker):
 
             self.set_filepath_label(filepath)
             mean_duration = np.mean([injection['x'][-1] for _, injection in parsed_list.items()])
-            self.parsed_label.setText((f"\
+            self.parsed_label.setText(textwrap.dedent((f"\
                 Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)} "
-                f"and mean duration {duration_to_str(mean_duration)}."))
+                f"and mean duration {duration_to_str(mean_duration)}.")))
+            self.parsed_label.adjustSize()
             if self.parsed_container not in self.children():
                 self.addLayout(self.parsed_container, 1, 1)
+                self.resize_handler()
     
     def prompt_filepath(self):
         valid_file_picked = False
@@ -269,7 +283,7 @@ class GCFilePicker(FilePicker):
         }
 
 class FileList(QVBoxLayout):
-    def __init__(self):
+    def __init__(self, resize_handler):
         super().__init__()
 
         self.file_pickers = {}
@@ -288,7 +302,7 @@ class FileList(QVBoxLayout):
 
             self.file_pickers[file_label] = instance(
                 button_text=f'Choose {file_label} File', file_label=file_label, file_type=f'.{extension}',
-                msg_detail=msg_detail, label_text=label_text)
+                msg_detail=msg_detail, label_text=label_text, resize_handler=resize_handler)
             self.addLayout(self.file_pickers[file_label])
             
     def get_parsed_input(self):

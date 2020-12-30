@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from itertools import chain
 import json
 import sys
 import os
@@ -6,7 +7,7 @@ from PySide2.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSizePolicy,
     QVBoxLayout, QLayout, QCheckBox, QPushButton,
     QTabWidget, QSpacerItem, QMessageBox)
-from PySide2.QtCore import Slot, Qt, QCoreApplication
+from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize
 import gui
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
@@ -68,7 +69,7 @@ class FileAnalysis(QVBoxLayout):
     def __init__(self, on_click_analysis, resize_handler):
         super().__init__()
 
-        self.addLayout(FileList())
+        self.addLayout(FileList(resize_handler=resize_handler))
 
         self.on_click_analysis = on_click_analysis
         analysis_button = QPushButton(text='Integrate')
@@ -80,20 +81,43 @@ class FileAnalysis(QVBoxLayout):
         if self.on_click_analysis:
             self.on_click_analysis()
 
+class ResizableTabWidget(QTabWidget):
+    WIDTH_PADDING = 6
+    HEIGHT_PADDING = 31
+
+    def __init__(self):
+        super().__init__()
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def sizeHint(self):
+        standard_size = super().sizeHint()
+        tab_size = self.currentWidget().sizeHint()
+        return QSize(
+            standard_size.width(),
+            tab_size.height() + ResizableTabWidget.HEIGHT_PADDING)
+    
+    def minimumSizeHint(self):
+        standard_size = super().sizeHint()
+        tab_size = self.currentWidget().minimumSizeHint()
+        return QSize(
+            standard_size.width(),
+            tab_size.height() + ResizableTabWidget.HEIGHT_PADDING)
+
 class ApplicationWindow(QMainWindow):
     PADX, PADY = (50, 40)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle(QCoreApplication.applicationName())
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
 
         self.main = QWidget()
         self.setCentralWidget(self.main)
         self.layout = QVBoxLayout(self.main)
-        self.layout.setSizeConstraint(QLayout.SetFixedSize)
+        self.layout.setSizeConstraint(QLayout.SetMinimumSize)
         self.layout.setContentsMargins(
             ApplicationWindow.PADX, ApplicationWindow.PADY, ApplicationWindow.PADX, ApplicationWindow.PADY)
-        self.tabs = QTabWidget()
+        self.tabs = ResizableTabWidget()
         self.layout.addWidget(self.tabs)
 
         self.params_container = QWidget()
@@ -105,15 +129,16 @@ class ApplicationWindow(QMainWindow):
         self.file_analysis.setLayout(
             FileAnalysis(on_click_analysis=self.handle_click_analysis, resize_handler=self.resize))
         self.tabs.addTab(self.file_analysis, 'File Analysis')
-        
+
+        self.tabs.currentChanged.connect(self.resize)
         self.resize()
 
     @Slot()
     def resize(self):
         QApplication.instance().processEvents()
-        self.tabs.setFixedSize(self.tabs.sizeHint())
+        self.tabs.adjustSize()
         self.layout.activate()
-        self.setFixedSize(self.sizeHint())
+        self.setFixedSize(self.minimumSizeHint())
 
     def handle_click_analysis(self):
         print('Saving settings (TEMP)')
