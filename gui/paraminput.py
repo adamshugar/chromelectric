@@ -3,7 +3,7 @@ from PySide2.QtWidgets import (
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem)
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QValidator
-from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, QtPt
+from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, QtPt, channels
 import gui
 
 class MinMaxValidator(QValidator):
@@ -112,11 +112,10 @@ class GasRow:
             self.parent.addWidget(line_edit, self.base_row, index + 1)
         self.min_input, self.max_input = line_edits[1:3]
 
-        channel_options = ('FID', 'TCD')
         channel_index = len(line_edits)
         channel_selector = QComboBox()
-        channel_selector.addItems(channel_options)
-        channel_selector.setCurrentText(initial_vals[channel_index] if initial_vals[channel_index] else channel_options[0])
+        channel_selector.addItems(channels)
+        channel_selector.setCurrentText(initial_vals[channel_index] if initial_vals[channel_index] else channels[0])
         self.columns.append(channel_selector)
         self.parent.addWidget(channel_selector, self.base_row, channel_index + 1, Qt.AlignCenter)
 
@@ -203,7 +202,7 @@ class GasList(QGridLayout):
             self.resize_requested.emit()
 
     def get_parsed_input(self):
-        result = { GasList.SETTINGS_ID: {}, 'duplicates': [] }
+        result = { GasList.SETTINGS_ID: {}, 'duplicate_gases': [] }
         for gas in self.gas_list:
             name, retention_min_str, retention_max_str, calib_val_str = [line_edit.text() for line_edit in gas.line_edits]
             channel = gas.channel_selector.currentText()
@@ -217,7 +216,7 @@ class GasList(QGridLayout):
                 continue
 
             if name in result[GasList.SETTINGS_ID]:
-                result['duplicates'].append(name)
+                result['duplicate_gases'].append(name)
             result[GasList.SETTINGS_ID][name] = {
                 'calibration_value': calib_val,
                 'channel': channel

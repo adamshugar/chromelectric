@@ -9,9 +9,10 @@ from PySide2.QtWidgets import (
     QTabWidget, QSpacerItem, QMessageBox)
 from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize
 import gui
+import gui.integrate as integrate
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
-from util import platform_messagebox
+from util import platform_messagebox, channels, atomic_subprocess
 
 class GeneralParams(QVBoxLayout):
     SETTINGS_FILE_NAME = 'chromelectric_settings.txt'
@@ -51,25 +52,28 @@ class GeneralParams(QVBoxLayout):
         if not self.save_checkbox.isChecked():
             return
 
-        settings = {
-            **self.gas_list.get_parsed_input(),
-            **self.short_entry_list.get_parsed_input(),
-            **self.checkbox_list.get_parsed_input()
-        }
         try:
             settings_handle = open(GeneralParams.SETTINGS_PATH, 'w')
-            json.dump(settings, settings_handle, indent=4)
+            json.dump(self.get_parsed_input(), settings_handle, indent=4)
         except IOError as err:
             warning = platform_messagebox(
                 text='Unable to save settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
                 informative=f'Error while saving to settings file: {err.strerror}.')
             warning.exec()
+
+    def get_parsed_input(self):
+        return {
+            **self.gas_list.get_parsed_input(),
+            **self.short_entry_list.get_parsed_input(),
+            **self.checkbox_list.get_parsed_input()
+        }
     
 class FileAnalysis(QVBoxLayout):
     def __init__(self, on_click_analysis, resize_handler):
         super().__init__()
 
-        self.addLayout(FileList(resize_handler=resize_handler))
+        self.file_list = FileList(resize_handler=resize_handler)
+        self.addLayout(self.file_list)
 
         self.on_click_analysis = on_click_analysis
         analysis_button = QPushButton(text='Integrate')
@@ -79,7 +83,7 @@ class FileAnalysis(QVBoxLayout):
 
     def handle_click_analysis(self):
         if self.on_click_analysis:
-            self.on_click_analysis()
+            self.on_click_analysis(self.file_list.get_parsed_input())
 
 class ResizableTabWidget(QTabWidget):
     WIDTH_PADDING = 6
@@ -125,10 +129,10 @@ class ApplicationWindow(QMainWindow):
         self.params_container.setLayout(self.general_params)
         self.tabs.addTab(self.params_container, 'General Parameters')
 
-        self.file_analysis = QWidget()
-        self.file_analysis.setLayout(
+        self.files_container = QWidget()
+        self.files_container.setLayout(
             FileAnalysis(on_click_analysis=self.handle_click_analysis, resize_handler=self.resize))
-        self.tabs.addTab(self.file_analysis, 'File Analysis')
+        self.tabs.addTab(self.files_container, 'File Analysis')
 
         self.tabs.currentChanged.connect(self.resize)
         self.resize()
@@ -140,9 +144,66 @@ class ApplicationWindow(QMainWindow):
         self.layout.activate()
         self.setFixedSize(self.minimumSizeHint())
 
-    def handle_click_analysis(self):
-        print('Saving settings (TEMP)')
+    def get_integration_params(self):
+        experiment_params = self.general_params.get_parsed_input()
+        gases_by_channel = {}
+        for gas_name, attributes in experiment_params['attributes_by_gas_name'].items():
+            channel = attributes['channel']
+            if gases_by_channel.get(channel) is None:
+                gases_by_channel[channel] = []
+            gases_by_channel[channel].append({ 'name': gas_name, **attributes })
+        return (experiment_params, gases_by_channel)
+    
+    def validate_graph_info(self, graph_info):
+        experiment_params, gases_by_channel, parsed_file_input = [graph_info[key] for key in ['experiment_params', 'gases_by_channel', 'parsed_file_input']]
+
+        active_channels = [channel for channel in channels if parsed_file_input[channel]]
+        if not active_channels:
+            m = platform_messagebox(
+                parent=self, text='Please select at least one injection file.',
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
+            m.exec()
+            return False
+        if not parsed_file_input['CA']:
+            m = platform_messagebox(
+                parent=self, text='Please select a CA file.',
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
+            m.exec()
+            return False
+        
+        missing_channels = [channel for channel in channels if channel in active_channels and channel not in gases_by_channel]
+        if missing_channels:
+            m = platform_messagebox(
+                parent=self, text=f"Please assign at least one gas to the following channel(s): {', '.join(missing_channels)}.",
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
+            m.exec()
+            return False
+
+        if experiment_params['duplicate_gases']:
+            m = platform_messagebox(
+                parent=self, text=f"Duplicate gas(es) found: {', '.join(experiment_params['duplicate_gases'])}.",
+                informative='The highest numbered gas in each case will be used. Continue?',
+                buttons=QMessageBox.Ok | QMessageBox.Cancel, default_button=QMessageBox.Cancel,
+                icon=QMessageBox.Critical)
+            result = m.exec()
+            if result == QMessageBox.Cancel:
+                return False
+        return True
+
+    def handle_click_analysis(self, parsed_file_input):
         self.general_params.save_settings()
+        experiment_params, gases_by_channel = self.get_integration_params()
+        
+        graph_info = {
+            'experiment_params': experiment_params,
+            'gases_by_channel': gases_by_channel,
+            'parsed_file_input': parsed_file_input
+        }
+        is_valid = self.validate_graph_info(graph_info)
+        if is_valid:        
+            atomic_subprocess(
+                obj=self, subprocess_attrname='integrate_subprocess', target=integrate.launch_window,
+                args=(graph_info, 'Integration and Analysis', 'Integration for Injection {}', 'Time (sec)', 'Potential (mV)'))
 
 def main():
     qapp = QApplication([''])

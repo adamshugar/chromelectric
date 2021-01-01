@@ -1,6 +1,5 @@
 import os
 import textwrap
-import multiprocessing as mp
 from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem, QMessageBox)
@@ -10,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from util import (
     filetype, find_sequences, duration_to_str, sequences_to_str,
-    is_windows, platform_messagebox, retry_cancel)
+    is_windows, platform_messagebox, retry_cancel, atomic_subprocess, channels)
 import algos.fileparse as fileparse
 import gui
 import gui.carousel as carousel
@@ -29,16 +28,6 @@ def single_graph(title, x, y, xlabel, ylabel):
 
 def carousel_graph(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
     carousel.launch_window(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
-
-def atomic_subprocess(obj, subprocess_attrname, target, args):
-    try:
-        subprocess = getattr(obj, subprocess_attrname)
-    except AttributeError:
-        subprocess = None
-    if not subprocess or not subprocess.is_alive():
-        new_subprocess = mp.Process(target=target, args=args)
-        setattr(obj, subprocess_attrname, new_subprocess)
-        new_subprocess.start()
 
 class FilePicker(QGridLayout):
     MAX_DISPLAY_LEN = 70
@@ -188,7 +177,7 @@ class GCFilePicker(FilePicker):
 
     def on_click_view(self):
         atomic_subprocess(
-            obj=self, subprocess_attrname='carousel_subprocess', target=carousel_graph,
+            obj=self, subprocess_attrname='carousel_subprocess', target=carousel.launch_window,
             args=(
                 self.parsed_list, f'{self.file_label} Injection List View',
                 f'Potential vs. Time for {self.file_label} ' + 'Injection {}',
@@ -288,11 +277,11 @@ class FileList(QVBoxLayout):
         super().__init__()
 
         self.file_pickers = {}
-        file_labels = ['FID', 'TCD', 'CA']
+        file_labels = channels + ['CA']
         label_text = 'No file selected.'
 
         for file_label in file_labels:
-            if file_label == 'FID' or file_label == 'TCD':
+            if file_label in channels:
                 msg_detail = 'Any injection can be chosen, assuming same directory and naming scheme.'
                 extension = filetype.GC
                 instance = GCFilePicker

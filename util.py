@@ -1,7 +1,10 @@
 """ Basic utility functions. """
 import re
 import sys
+import multiprocessing as mp
 from PySide2.QtWidgets import QApplication, QMessageBox
+
+channels = ['FID', 'TCD']
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -74,8 +77,18 @@ class QtPt:
             return font.pixelSize()
         return QtPt.pt_to_px(font.pointSize())
 
-def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed=''):
-    messagebox = QMessageBox()
+def atomic_subprocess(obj, subprocess_attrname, target, args):
+    try:
+        subprocess = getattr(obj, subprocess_attrname)
+    except AttributeError:
+        subprocess = None
+    if not subprocess or not subprocess.is_alive():
+        new_subprocess = mp.Process(target=target, args=args)
+        setattr(obj, subprocess_attrname, new_subprocess)
+        new_subprocess.start()
+
+def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed='', parent=None):
+    messagebox = QMessageBox(parent=parent)
     messagebox.setIcon(icon)
     messagebox.setStandardButtons(buttons)
     messagebox.setDefaultButton(default_button)
