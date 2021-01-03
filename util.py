@@ -1,10 +1,13 @@
-""" Basic utility functions. """
+"""Basic utility functions"""
 import re
 import sys
 import multiprocessing as mp
-from PySide2.QtWidgets import QApplication, QMessageBox
 
 channels = ['FID', 'TCD']
+
+class filetype:
+    GC = 'asc'
+    CA = 'mpt'
 
 def is_nonnegative_int(str):
     # Use regex instead of built-in isnumeric() because isnumeric() accepts exponents and fractions.
@@ -26,9 +29,11 @@ def safe_float(str):
         return None
 
 def find_sequences(nums):
-    """ Given an unordered list of non-negative, unique integers, find all contiguous sequences.
+    """
+    Given an unordered list of non-negative, unique integers, find all contiguous sequences.
     Returns the list of sequences as a list of tuples. Assumes valid input list of ints with 
-    length greater than zero. LeetCode easy. """
+    length greater than zero. LeetCode easy.
+    """
     nums.sort()
     prev = nums[0]
     sequences = [[prev, None]]
@@ -63,20 +68,6 @@ def duration_to_str(duration_seconds):
 def is_windows():
     return sys.platform.startswith('win32') or sys.platform.startswith('cygwin')
 
-class QtPt:
-    @staticmethod
-    def pt_to_px(pt):
-        BASE_DPI = 72
-        # Logical DPI is more robust than physical DPI (in the caes of retina displays & user customization)
-        logical_dpi = QApplication.instance().primaryScreen().logicalDotsPerInch()
-        return pt * (logical_dpi / BASE_DPI)
-
-    @staticmethod
-    def font_size_px(font):
-        if font.pixelSize() != -1:
-            return font.pixelSize()
-        return QtPt.pt_to_px(font.pointSize())
-
 def atomic_subprocess(obj, subprocess_attrname, target, args):
     try:
         subprocess = getattr(obj, subprocess_attrname)
@@ -86,31 +77,3 @@ def atomic_subprocess(obj, subprocess_attrname, target, args):
         new_subprocess = mp.Process(target=target, args=args)
         setattr(obj, subprocess_attrname, new_subprocess)
         new_subprocess.start()
-
-def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed='', parent=None):
-    messagebox = QMessageBox(parent=parent)
-    messagebox.setIcon(icon)
-    messagebox.setStandardButtons(buttons)
-    messagebox.setDefaultButton(default_button)
-    if is_windows():
-        messagebox.setWindowTitle(QCoreApplication.applicationName())
-        messagebox.setText(text + informative)
-        if detailed:
-            messagebox.setDetailedText(detailed)
-    else:
-        messagebox.setText(text)
-        if informative:
-            messagebox.setInformativeText(informative)
-        if detailed:
-            messagebox.setDetailedText(detailed)
-    return messagebox
-
-def retry_cancel(text, informative='', detailed='', icon=QMessageBox.Critical):
-    messagebox = platform_messagebox(
-        text=text, buttons=QMessageBox.Cancel | QMessageBox.Retry, default_button=QMessageBox.Retry,
-        icon=icon, informative=informative, detailed=detailed)
-    return messagebox.exec() == QMessageBox.Retry
-
-class filetype:
-    GC = 'asc'
-    CA = 'mpt'

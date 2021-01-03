@@ -12,9 +12,11 @@ import gui
 import gui.integrate as integrate
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
-from util import platform_messagebox, channels, atomic_subprocess
+from gui import platform_messagebox
+from util import channels, atomic_subprocess
 
 class GeneralParams(QVBoxLayout):
+    """Wrapper class for GUI to enter all relevant experimental parameters."""
     SETTINGS_FILE_NAME = 'chromelectric_settings.txt'
     SETTINGS_PATH = os.path.join(sys.path[0], SETTINGS_FILE_NAME)
 
@@ -42,9 +44,7 @@ class GeneralParams(QVBoxLayout):
     @staticmethod
     def load_settings():
         try:
-            file = open(GeneralParams.SETTINGS_PATH, 'r')
-            settings = json.load(file)
-            return settings
+            return json.load(open(GeneralParams.SETTINGS_PATH, 'r'))
         except IOError:
             return None # File won't exist on first program run
 
@@ -58,7 +58,7 @@ class GeneralParams(QVBoxLayout):
         except IOError as err:
             warning = platform_messagebox(
                 text='Unable to save settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
-                informative=f'Error while saving to settings file: {err.strerror}.')
+                informative=f'Error while saving to settings file: {err.strerror}.', parent=self.parentWidget())
             warning.exec()
 
     def get_parsed_input(self):
@@ -69,6 +69,7 @@ class GeneralParams(QVBoxLayout):
         }
     
 class FileAnalysis(QVBoxLayout):
+    """Wrapper class for GUI to pick and view GC/CA files."""
     def __init__(self, on_click_analysis, resize_handler):
         super().__init__()
 
@@ -78,7 +79,7 @@ class FileAnalysis(QVBoxLayout):
         self.on_click_analysis = on_click_analysis
         analysis_button = QPushButton(text='Integrate')
         analysis_button.clicked.connect(self.handle_click_analysis)
-        analysis_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        analysis_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.addWidget(analysis_button, alignment=Qt.AlignRight)
 
     def handle_click_analysis(self):
@@ -86,6 +87,12 @@ class FileAnalysis(QVBoxLayout):
             self.on_click_analysis(self.file_list.get_parsed_input())
 
 class ResizableTabWidget(QTabWidget):
+    """
+    Wrapper for Qt tabs widget that automatically vertically resizes to accommodate the
+    minimum possible height of the tab contents. Useful primarily for a tab widget as a
+    top-level container within a window, as is the case in this program.
+    """
+    # Determined "experimentally" by investigation on various OSes; these seem to work well enough.
     WIDTH_PADDING = 6
     HEIGHT_PADDING = 31
 
@@ -151,10 +158,14 @@ class ApplicationWindow(QMainWindow):
             channel = attributes['channel']
             if gases_by_channel.get(channel) is None:
                 gases_by_channel[channel] = []
-            gases_by_channel[channel].append({ 'name': gas_name, **attributes })
+            gases_by_channel[channel].append(gas_name)
         return (experiment_params, gases_by_channel)
     
     def validate_graph_info(self, graph_info):
+        """
+        Validates all relevant parameters and files for subsequent integration and analysis, and alerts
+        the user via dialog boxes of any validation failure. Returns true if valid, false otherwise.
+        """
         experiment_params, gases_by_channel, parsed_file_input = [graph_info[key] for key in ['experiment_params', 'gases_by_channel', 'parsed_file_input']]
 
         active_channels = [channel for channel in channels if parsed_file_input[channel]]

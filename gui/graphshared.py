@@ -1,6 +1,11 @@
-from PySide2.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel
+"""
+GUI components shared between the "carousel" graph view and the "integration" graph view.
+These include pagination functionality and some small utility classes.
+"""
+from PySide2.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QFont, QIntValidator
+from gui import Label
 
 class Pagination(QVBoxLayout):
     page_changed = Signal(int, int)
@@ -89,7 +94,7 @@ class PageIndicator(QHBoxLayout):
         self.labels = []
         self.addStretch(1)
         for _ in range(5):
-            label = QLabel('')
+            label = Label('')
             label.setFixedWidth(20)
             label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)

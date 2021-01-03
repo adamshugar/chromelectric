@@ -1,3 +1,8 @@
+"""
+Parsing of gas chromatography files and cyclic amperometry files into Python objects.
+Currently supports only SRI/PeakSimple files for GC (*.asc), but support for Agilent (*.ch) may be added.
+Supports ECLab-style text exported CA files (*.mpt).
+"""
 from datetime import datetime
 import re
 import os

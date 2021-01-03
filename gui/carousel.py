@@ -1,6 +1,10 @@
+"""
+An interface for graphical viewing of a series of files.
+Offers easy pagination and overlay of other graphs on top of the current file being graphed.
+"""
 from PySide2.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QLineEdit, QLabel, QGridLayout)
+    QHBoxLayout, QPushButton, QLineEdit, QGridLayout)
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QFont, QIntValidator
 import matplotlib

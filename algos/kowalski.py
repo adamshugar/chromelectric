@@ -1,8 +1,11 @@
-"""Given a list of gases with minimum and maximum bounds on retention time, find all overlaps
-between these bounds. Runs in O(n^2); faster than asymptotically optimal (but more complex)
-solutions, since we only ever deal with a few gases.
-E.g. { 'CO2': (1, 10), 'H2': (9, 12), 'C2H4': (100, 130) } -> { 'CO2': ['H2'], 'H2': ['CO2'], 'C2H4': [] }"""
 def calc_retention_overlaps(retention_times):
+    """
+    Given a list of gases with minimum and maximum bounds on retention time, find all overlaps
+    between these bounds. Runs in O(n^2); faster than asymptotically optimal (but more complex)
+    solutions, since we only ever deal with a few gases.
+    
+    E.g. { 'CO2': (1, 10), 'H2': (9, 12), 'C2H4': (100, 130) } -> { 'CO2': ['H2'], 'H2': ['CO2'], 'C2H4': [] }
+    """
     overlaps_by_gas = {}
     items = retention_times.items()
     for gas, bounds in items:

@@ -1,7 +1,11 @@
+"""
+GUI components to pick GC & CA files from disc and launch windows in which
+graphs of the chosen files can be viewed.
+"""
 import os
 import textwrap
 from PySide2.QtWidgets import (
-    QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
+    QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem, QMessageBox)
 from PySide2.QtCore import Signal, Slot, Qt, QCoreApplication
 import matplotlib
@@ -9,9 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from util import (
     filetype, find_sequences, duration_to_str, sequences_to_str,
-    is_windows, platform_messagebox, retry_cancel, atomic_subprocess, channels)
+    is_windows, atomic_subprocess, channels)
 import algos.fileparse as fileparse
 import gui
+from gui import Label, platform_messagebox, retry_cancel
 import gui.carousel as carousel
 matplotlib.use('Qt5Agg')
 
@@ -42,9 +47,9 @@ class FilePicker(QGridLayout):
 
         picker_button = QPushButton(button_text)
         picker_button.clicked.connect(self.on_click_picker)
-        picker_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        picker_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.picker_label = QLabel(label_text)
+        self.picker_label = Label(label_text)
         self.addWidget(picker_button, 0, 0)
         self.addWidget(self.picker_label, 0, 1)
 
@@ -76,7 +81,8 @@ class FilePicker(QGridLayout):
                 file_picked = True
             except IOError as err:
                 should_retry = retry_cancel(
-                    text=f'Error while opening {self.file_label} file.', informative=f'{err.strerror}.')
+                    text=f'Error while opening {self.file_label} file.',
+                    informative=f'{err.strerror}.', parent=self.parentWidget())
                 if not should_retry:
                     return None
         handle.close()
@@ -92,15 +98,15 @@ class CAFilePicker(FilePicker):
         self.resize_handler = resize_handler
 
         self.parsed_container = QHBoxLayout()
-        self.parsed_label = QLabel()
+        self.parsed_label = Label()
         self.parsed_label.setWordWrap(True)
 
         resistance_button = QPushButton(text='View kΩ vs. t')
         resistance_button.clicked.connect(self.on_click_resistance)
-        resistance_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        resistance_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         current_button = QPushButton(text='View mA vs. t')
         current_button.clicked.connect(self.on_click_current)
-        current_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        current_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         self.parsed_container.addWidget(self.parsed_label)
         self.parsed_container.addWidget(resistance_button)
@@ -133,7 +139,6 @@ class CAFilePicker(FilePicker):
                 Found cyclic amperometry data with "
                 f"total duration {duration_to_str(time_diff)} "
                 f"spanning {len(potentials)} potentials, from {max(potentials)}V to {min(potentials)}V.")))
-            self.parsed_label.adjustSize()
             if self.parsed_container not in self.children():
                 self.addLayout(self.parsed_container, 1, 1)
                 self.resize_handler()
@@ -150,7 +155,8 @@ class CAFilePicker(FilePicker):
                 valid_file_picked = True
             except Exception: # Fails safely for CA files with improper meta or data format
                 should_retry = retry_cancel(
-                    text='Error while reading file', informative='CA file is not properly formatted.')
+                    text='Error while reading file',
+                    informative='CA file is not properly formatted.', parent=self.parentWidget())
                 if not should_retry:
                     return (None, None)
             
@@ -167,11 +173,11 @@ class GCFilePicker(FilePicker):
         self.file_label = file_label
 
         self.parsed_container = QHBoxLayout()
-        self.parsed_label = QLabel()
+        self.parsed_label = Label()
         self.parsed_label.setWordWrap(True)
         view_button = QPushButton(text='View mV vs. t')
         view_button.clicked.connect(self.on_click_view)
-        view_button.setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        view_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.parsed_container.addWidget(self.parsed_label)
         self.parsed_container.addWidget(view_button)
 
@@ -195,7 +201,6 @@ class GCFilePicker(FilePicker):
             self.parsed_label.setText(textwrap.dedent((f"\
                 Found {len(parsed_list)} total injections with indices {sequences_to_str(sequences)} "
                 f"and mean duration {duration_to_str(mean_duration)}.")))
-            self.parsed_label.adjustSize()
             if self.parsed_container not in self.children():
                 self.addLayout(self.parsed_container, 1, 1)
                 self.resize_handler()
@@ -212,14 +217,14 @@ class GCFilePicker(FilePicker):
             error_text, error_informative, error_detailed = (result.get('error_text'), result.get('error_informative'), result.get('error_detailed'))
             if not parsed_list: # If no list, then we failed, so need to re-pick
                 should_retry = retry_cancel(
-                    text=error_text, informative=error_informative, detailed=error_detailed)
+                    text=error_text, informative=error_informative, detailed=error_detailed, parent=self.parentWidget())
                 if not should_retry:
                     return (None, None, None)
             elif error_text: # If list exists but there is an error message, it's just a warning (re-pick optional)
                 messagebox = platform_messagebox(
                     text=error_text, buttons=QMessageBox.Abort | QMessageBox.Retry | QMessageBox.Ignore,
                     default_button=QMessageBox.Retry, icon=QMessageBox.Warning,
-                    informative=error_informative, detailed=error_detailed)
+                    informative=error_informative, detailed=error_detailed, parent=self.parentWidget())
                 response = messagebox.exec()
                 if response == QMessageBox.Abort:
                     return (None, None, None)

@@ -1,10 +1,19 @@
+"""
+GUI components to input all relevant experimental parameters.
+Includes sections for inputting:
+ - a list of gases with name, retention min/max, and channel (e.g. FID/TCD)
+ - information about gaseous flow rate and volume (for use in calculating Faradiac efficiency from CA file)
+ - information related to the voltage of the system (e.g. reference electrode potential, solution pH)
+ - whether to output extra graphical views in addition to primary comma-separated values (CSV) result
+"""
 from PySide2.QtWidgets import (
-    QPushButton, QLineEdit, QLabel, QVBoxLayout, QHBoxLayout, QFrame,
+    QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame,
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem)
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QValidator
-from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, QtPt, channels
+from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, channels
 import gui
+from gui import Label, QtPt
 
 class MinMaxValidator(QValidator):
     def __init__(self, parent, _):
@@ -81,7 +90,7 @@ class GasRow:
         self.resize_signal = resize_signal
 
         self.columns = []
-        number_label = QLabel(text=f'{row_number + 1}.')
+        number_label = Label(text=f'{row_number + 1}.')
         self.columns.append(number_label)
         self.parent.addWidget(number_label, self.base_row, 0, Qt.AlignLeft)
 
@@ -120,7 +129,7 @@ class GasRow:
         self.parent.addWidget(channel_selector, self.base_row, channel_index + 1, Qt.AlignCenter)
 
         for index, err_name in enumerate(GasRow.ERROR_NAMES):
-            curr_label = QLabel(text=GasRow.ERRORS_BY_LABEL[err_name])
+            curr_label = Label(text=GasRow.ERRORS_BY_LABEL[err_name])
             curr_label.setStyleSheet('color: red;')
             setattr(self, err_name, curr_label)
             self.parent.addWidget(curr_label, self.base_row + index + 1, 1, 1, GasList.NUM_FIELDS + 1)
@@ -161,7 +170,7 @@ class GasList(QGridLayout):
         self.resize_requested.connect(resize_handler)
 
         col_titles = ['Gas Name', 'Min Retention (sec)', 'Max Retention (sec)', 'Calib. (ppm/(mV•s))', 'Analysis Channel']
-        for index, label in enumerate([QLabel(col_title) for col_title in col_titles]):
+        for index, label in enumerate([Label(col_title) for col_title in col_titles]):
             self.addWidget(label, 0, index + 1, Qt.AlignLeft)
 
         self.gas_list = []
@@ -185,7 +194,7 @@ class GasList(QGridLayout):
         self.add_row_button.clicked.connect(self.show_next_row)
         self.addItem(QSpacerItem(1, gui.PADDING // 3), add_button_base, 0)
         self.addWidget(self.add_row_button, add_button_base + 1, 0, 1, GasList.NUM_FIELDS + 1, Qt.AlignCenter)
-        self.add_row_button.setSizePolicy(QSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred))
+        self.add_row_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 
     def add_row(self, initial_vals=['' for _ in range(NUM_FIELDS)]):
         self.gas_list.append(GasRow(
@@ -233,11 +242,11 @@ class ShortEntry:
     def __init__(
         self, parent, row, before_text, after_text, initial_text,
         validator_instance, col_offset=0):
-        before_text = QLabel(before_text)
+        before_text = Label(before_text)
         self.entry = LineEdit(
             width=gui.FLOAT_WIDTH, max_width=gui.FLOAT_WIDTH,
             alignment=Qt.AlignRight, initial_text=initial_text, validator_instance=validator_instance)
-        after_text = QLabel(' ' + after_text)
+        after_text = Label(' ' + after_text)
 
         parent.addWidget(before_text, row, col_offset + 0)
         parent.addWidget(self.entry, row, col_offset + 1)
@@ -256,14 +265,14 @@ class NamedDivider(QHBoxLayout):
     def __init__(self, name):
         super().__init__()
         self.setSpacing(gui.PADDING)
-        self.addWidget(QLabel(name), Qt.AlignLeft)
+        self.addWidget(Label(name), Qt.AlignLeft)
         self.addWidget(QHLine(), Qt.AlignCenter)
 
 class CheckboxList(QVBoxLayout):
     def __init__(self, saved_settings):
         super().__init__()
 
-        self.checkbutton_fields = {
+        self.checkboxes = {
             'plot_j': {
                 'label': 'Generate plot of partial current densities (log(mA/cm²) vs. V)',
                 'default': True
@@ -284,7 +293,7 @@ class CheckboxList(QVBoxLayout):
 
         self.addLayout(NamedDivider(name='Additional output parameters'))
         base_indent = gui.PADDING * 2
-        for name, attrs in self.checkbutton_fields.items():
+        for name, attrs in self.checkboxes.items():
             curr_row = QHBoxLayout()
 
             total_indent = base_indent + (attrs.get('indent') if attrs.get('indent') else 0)
@@ -292,20 +301,21 @@ class CheckboxList(QVBoxLayout):
 
             checkbox = QCheckBox(attrs['label'])
             curr_row.addWidget(checkbox)
-            bool_checked = saved_settings[name] if name in saved_settings else self.checkbutton_fields[name]['default']
+            bool_checked = saved_settings[name] if name in saved_settings else self.checkboxes[name]['default']
             checkbox.setCheckState(Qt.Checked if bool_checked else Qt.Unchecked)
             attrs['ref'] = checkbox
 
             self.addLayout(curr_row)
 
-        self.checkbutton_fields['plot_fe']['ref'].clicked.connect(self.toggle_disable_fe_total)
+        self.checkboxes['plot_fe']['ref'].clicked.connect(self.toggle_disable_fe_total)
+        self.toggle_disable_fe_total()
 
     @Slot()
     def toggle_disable_fe_total(self):
-        self.checkbutton_fields['fe_total']['ref'].setEnabled(self.checkbutton_fields['plot_fe']['ref'].isChecked())
+        self.checkboxes['fe_total']['ref'].setEnabled(self.checkboxes['plot_fe']['ref'].isChecked())
 
     def get_parsed_input(self):
-        return { field: bool(self.checkbutton_fields[field]['ref'].isChecked()) for field in self.checkbutton_fields }
+        return { field: bool(self.checkboxes[field]['ref'].isChecked()) for field in self.checkboxes }
 
 class GenericValidator(QValidator):
     def __init__(self, validator):
