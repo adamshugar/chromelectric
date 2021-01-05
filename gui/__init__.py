@@ -4,8 +4,9 @@ from util import is_windows
 
 # Standard padding for any widget, in pixels
 PADDING = 15
-# Widths in number of characters for entry box (these are meant as minimums)
-STRING_WIDTH = 14
+# Widths in number of characters for a "LineEdit" text entry box.
+# They set the fixed width of the entry box but don't limit how many chars the user can enter.
+STRING_WIDTH = 10
 INT_WIDTH = 5
 FLOAT_WIDTH = 8
 
@@ -14,6 +15,11 @@ class Label(QLabel):
     def setText(self, str):
         super().setText(str)
         self.adjustSize()
+
+    def resizeEvent(self, event):
+        new_height = self.heightForWidth(self.width())
+        if new_height > 0:
+            self.setMinimumHeight(new_height)
 
 def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed='', parent=None):
     """Platform-independent dialog box for quick messages and button-based user input"""

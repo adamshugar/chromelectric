@@ -10,7 +10,8 @@ from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame,
     QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem)
 from PySide2.QtCore import Signal, Slot, Qt
-from PySide2.QtGui import QValidator
+from PySide2.QtGui import QValidator, QIntValidator
+from math import ceil
 from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, channels
 import gui
 from gui import Label, QtPt
@@ -49,17 +50,23 @@ class CalibValidator(QValidator):
         name = 'calib_error_label'
         row_object.toggle_error_label(safe_float(text) == 0, name)
 
+class NonnegativeIntValidator(QIntValidator):
+    def __init__(self, parent, *args):
+        super().__init__(parent)
+        self.setBottom(0)
+    
+    @staticmethod
+    def on_focus_out(*args):
+        pass
+
 class LineEdit(QLineEdit):
     def __init__(
-        self, width=None, max_width=None, alignment=None, initial_text=None,
+        self, width=None, alignment=None, initial_text=None,
         validator_instance=None, validator_class=None, row_object=None):
         super().__init__()
         self.row_object = row_object
         if width:
-            self.setMinimumWidth(width * QtPt.font_size_px(self.font()))
-            self.setMaxLength(width * 2)
-        if max_width:
-            self.setMaximumWidth(max_width * QtPt.font_size_px(self.font()))
+            self.setFixedWidth(width * QtPt.font_size_px(self.font()))
         if alignment:
             self.setAlignment(alignment)
         if initial_text:
@@ -107,9 +114,12 @@ class GasRow:
             'float': {
                 'width': gui.FLOAT_WIDTH,
                 'alignment': Qt.AlignRight
-            }
+            },
         }
-        line_edit_order = [('string', None), ('int', MinMaxValidator), ('int', MinMaxValidator), ('float', CalibValidator)]
+        line_edit_order = [
+            ('string', None), ('int', MinMaxValidator), ('int', MinMaxValidator),
+            ('int', NonnegativeIntValidator), ('float', CalibValidator)
+        ]
         line_edits = [
             LineEdit(
                 **field_types[edit_params[0]], initial_text=str(initial_vals[edit_index]),
@@ -118,7 +128,7 @@ class GasRow:
         ]
         for index, line_edit in enumerate(line_edits):
             self.columns.append(line_edit)
-            self.parent.addWidget(line_edit, self.base_row, index + 1)
+            self.parent.addWidget(line_edit, self.base_row, index + 1, alignment=Qt.AlignHCenter)
         self.min_input, self.max_input = line_edits[1:3]
 
         channel_index = len(line_edits)
@@ -132,7 +142,7 @@ class GasRow:
             curr_label = Label(text=GasRow.ERRORS_BY_LABEL[err_name])
             curr_label.setStyleSheet('color: red;')
             setattr(self, err_name, curr_label)
-            self.parent.addWidget(curr_label, self.base_row + index + 1, 1, 1, GasList.NUM_FIELDS + 1)
+            self.parent.addWidget(curr_label, self.base_row + index + 1, 1, 1, len(line_edits) + 1)
             curr_label.hide()
 
         self.line_edits = line_edits
@@ -155,7 +165,6 @@ class GasRow:
         self.resize_signal.emit()
 
 class GasList(QGridLayout):
-    NUM_FIELDS = 5
     DEFAULT_GAS_COUNT = 2
     MAX_GAS_COUNT = 5
     SETTINGS_ID = 'attributes_by_gas_name'
@@ -169,16 +178,21 @@ class GasList(QGridLayout):
         self.setSizeConstraint(QLayout.SetFixedSize)
         self.resize_requested.connect(resize_handler)
 
-        col_titles = ['Gas Name', 'Min Retention (sec)', 'Max Retention (sec)', 'Calib. (ppm/(mV•s))', 'Analysis Channel']
+        col_titles = [
+            'Gas Name', 'Min Retention (sec)', 'Max Retention (sec)',
+            'Reduction Count', 'Calib. ((mV•s)/ppm)', 'Analysis Channel'
+        ]
+        self.num_fields = len(col_titles)
         for index, label in enumerate([Label(col_title) for col_title in col_titles]):
             self.addWidget(label, 0, index + 1, Qt.AlignLeft)
 
         self.gas_list = []
         if saved_settings and GasList.SETTINGS_ID in saved_settings:
             attributes_by_gas_name = saved_settings[GasList.SETTINGS_ID]
-            attribute_order = ['retention_min', 'retention_max', 'calibration_value', 'channel']
+            attribute_order = ['retention_min', 'retention_max', 'reduction_count', 'calibration_value', 'channel']
             for gas_name, attrs in attributes_by_gas_name.items():
-                self.add_row(initial_vals=[gas_name, *[attrs.get(key) if attrs.get(key) else '' for key in attribute_order]])
+                self.add_row(initial_vals=[gas_name, \
+                    *[attrs.get(key) if attrs.get(key) is not None else '' for key in attribute_order]])
 
         saved_row_count = len(self.gas_list)
         additional_row_count = max(GasList.MAX_GAS_COUNT - saved_row_count, 0)
@@ -193,10 +207,12 @@ class GasList(QGridLayout):
         self.add_row_button = QPushButton(text='Add Gas')
         self.add_row_button.clicked.connect(self.show_next_row)
         self.addItem(QSpacerItem(1, gui.PADDING // 3), add_button_base, 0)
-        self.addWidget(self.add_row_button, add_button_base + 1, 0, 1, GasList.NUM_FIELDS + 1, Qt.AlignCenter)
+        self.addWidget(self.add_row_button, add_button_base + 1, 0, 1, self.num_fields + 1, Qt.AlignCenter)
         self.add_row_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 
-    def add_row(self, initial_vals=['' for _ in range(NUM_FIELDS)]):
+    def add_row(self, initial_vals=None):
+        if not initial_vals:
+            initial_vals = ['' for _ in range(self.num_fields)]
         self.gas_list.append(GasRow(
             parent=self, header_row_count=1, row_number=len(self.gas_list),
             initial_vals=initial_vals, resize_signal=self.resize_requested))
@@ -213,13 +229,16 @@ class GasList(QGridLayout):
     def get_parsed_input(self):
         result = { GasList.SETTINGS_ID: {}, 'duplicate_gases': [] }
         for gas in self.gas_list:
-            name, retention_min_str, retention_max_str, calib_val_str = [line_edit.text() for line_edit in gas.line_edits]
+            name, retention_min_str, retention_max_str, reduction_str, calib_val_str = \
+                [line_edit.text() for line_edit in gas.line_edits]
             channel = gas.channel_selector.currentText()
 
+            reduction_val = safe_int(reduction_str)
             calib_val = safe_float(calib_val_str)
             # Assume if min is blank 0 is intended and if max is blank end of GC run is intended
             retention_min = safe_int(retention_min_str)
             retention_max = safe_int(retention_max_str)
+
 
             if not name or not calib_val: # Calibration value must be greater than zero
                 continue
@@ -227,6 +246,7 @@ class GasList(QGridLayout):
             if name in result[GasList.SETTINGS_ID]:
                 result['duplicate_gases'].append(name)
             result[GasList.SETTINGS_ID][name] = {
+                'reduction_count': reduction_val,
                 'calibration_value': calib_val,
                 'channel': channel
             }
@@ -244,8 +264,8 @@ class ShortEntry:
         validator_instance, col_offset=0):
         before_text = Label(before_text)
         self.entry = LineEdit(
-            width=gui.FLOAT_WIDTH, max_width=gui.FLOAT_WIDTH,
-            alignment=Qt.AlignRight, initial_text=initial_text, validator_instance=validator_instance)
+            width=gui.FLOAT_WIDTH, alignment=Qt.AlignRight,
+            initial_text=initial_text, validator_instance=validator_instance)
         after_text = Label(' ' + after_text)
 
         parent.addWidget(before_text, row, col_offset + 0)
@@ -330,13 +350,13 @@ class ShortEntryList(QGridLayout):
         super().__init__()
 
         self.fe_params = {
-            'flow_total': {
+            'flow_rate': {
                 'before_text': 'Total gaseous flow rate',
                 'after_text': 'sccm'
             },
-            'flow_active': {
-                'before_text': 'Flow rate of electrochemically active gases',
-                'after_text': 'sccm'
+            'sample_vol': {
+                'before_text': 'GC injection (sample loop) volume',
+                'after_text': 'mL'
             },
             'mix_vol': {
                 'before_text': 'Pre-GC mixing volume',
@@ -345,7 +365,7 @@ class ShortEntryList(QGridLayout):
         }
 
         self.v_correction_params = {
-            'high_freq_resistance': {
+            'solution_resistance': {
                 'before_text': 'High frequency resistance (PEIS)',
                 'after_text': 'Ω',
             },
@@ -382,7 +402,7 @@ class ShortEntryList(QGridLayout):
         nonnegative_float_validation = GenericValidator(lambda final_text: not final_text or is_nonnegative_float(final_text))
         any_float_validation = GenericValidator(lambda final_text: not final_text or final_text == '-' or safe_float(final_text) is not None)
         for index, (field_name, field_attrs) in enumerate(entry_dict.items()):
-            initial_text = saved_settings[field_name] if field_name in saved_settings else ''
+            initial_text = str(saved_settings[field_name]) if field_name in saved_settings else ''
             validation = any_float_validation if field_attrs.get('allow_negative') else nonnegative_float_validation
             self.addItem(QSpacerItem(indent, 1), self.curr_row, 0)
             short_entry = ShortEntry(

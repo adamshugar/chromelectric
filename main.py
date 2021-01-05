@@ -9,7 +9,7 @@ from PySide2.QtWidgets import (
     QTabWidget, QSpacerItem, QMessageBox)
 from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize
 import gui
-import gui.integrate as integrate
+# import gui.integrate as integrate
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
 from gui import platform_messagebox
@@ -47,6 +47,13 @@ class GeneralParams(QVBoxLayout):
             return json.load(open(GeneralParams.SETTINGS_PATH, 'r'))
         except IOError:
             return None # File won't exist on first program run
+        except json.decoder.JSONDecodeError:
+            warning = platform_messagebox(
+                text='Unable to load settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
+                informative=(
+                    'Your saved settings file is improperly formatted. '
+                    'Running the program again and saving settings will automatically fix the problem.'))
+            warning.exec()
 
     def save_settings(self):
         if not self.save_checkbox.isChecked():
@@ -161,12 +168,12 @@ class ApplicationWindow(QMainWindow):
             gases_by_channel[channel].append(gas_name)
         return (experiment_params, gases_by_channel)
     
-    def validate_graph_info(self, graph_info):
+    def validate_all_inputs(self, all_inputs):
         """
         Validates all relevant parameters and files for subsequent integration and analysis, and alerts
         the user via dialog boxes of any validation failure. Returns true if valid, false otherwise.
         """
-        experiment_params, gases_by_channel, parsed_file_input = [graph_info[key] for key in ['experiment_params', 'gases_by_channel', 'parsed_file_input']]
+        experiment_params, gases_by_channel, parsed_file_input = [all_inputs[key] for key in ['experiment_params', 'gases_by_channel', 'parsed_file_input']]
 
         active_channels = [channel for channel in channels if parsed_file_input[channel]]
         if not active_channels:
@@ -205,16 +212,16 @@ class ApplicationWindow(QMainWindow):
         self.general_params.save_settings()
         experiment_params, gases_by_channel = self.get_integration_params()
         
-        graph_info = {
+        all_inputs = {
             'experiment_params': experiment_params,
             'gases_by_channel': gases_by_channel,
             'parsed_file_input': parsed_file_input
         }
-        is_valid = self.validate_graph_info(graph_info)
+        is_valid = self.validate_all_inputs(all_inputs)
         if is_valid:        
             atomic_subprocess(
                 obj=self, subprocess_attrname='integrate_subprocess', target=integrate.launch_window,
-                args=(graph_info, 'Integration and Analysis', 'Integration for Injection {}', 'Time (sec)', 'Potential (mV)'))
+                args=(all_inputs, 'Integration and Analysis', 'Integration for Injection {}', 'Time (sec)', 'Potential (mV)'))
 
 def main():
     qapp = QApplication([''])

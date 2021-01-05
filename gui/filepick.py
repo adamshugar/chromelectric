@@ -6,7 +6,7 @@ import os
 import textwrap
 from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
-    QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QSpacerItem, QMessageBox)
+    QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QMessageBox)
 from PySide2.QtCore import Signal, Slot, Qt, QCoreApplication
 import matplotlib
 import matplotlib.pyplot as plt

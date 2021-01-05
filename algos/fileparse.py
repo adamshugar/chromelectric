@@ -1,9 +1,13 @@
 """
 Parsing of gas chromatography files and cyclic amperometry files into Python objects.
-Currently supports only SRI/PeakSimple files for GC (*.asc), but support for Agilent (*.ch) may be added.
-Supports ECLab-style text exported CA files (*.mpt).
+
+Currently supports only SRI/PeakSimple GC files (*.asc). Support for Agilent GC files (*.ch)
+is a priority and may be added soon.
+
+Supports EC-Lab BioLogic text-style CA files (*.mpt). It is unlikely that support will be added for
+binary EC-Lab CA files (*.mpr) as EC-Lab offers built-in "export to text" functionality.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import os
 import numpy as np
@@ -47,7 +51,7 @@ class GC:
         run_duration = num_readings / sample_rate # In seconds
         time_increments = np.linspace(0, run_duration, potentials.size)
         warning = potentials.size != num_readings # Indicates file might be truncated prematurely
-        start_time = datetime.strptime(f'{date_string} {time_string}', r'%m-%d-%Y %H:%M:%S').timestamp()
+        start_time = datetime.strptime(f'{date_string} {time_string}', r'%m-%d-%Y %H:%M:%S')
         return {
             'warning': warning,
             'start_time': start_time,
@@ -104,17 +108,32 @@ class CA:
         meta_total = int(meta_total_str)
 
         meta_curr = 3
-        # NOTE: 'time/s' field represents offset from acquisition start, NOT technique start.
-        start_time_field = 'acquisition started on'        
         while meta_curr < meta_total:
             meta_curr += 1
             line = handle.readline().lower()
-            if line.startswith(start_time_field):
+            if line.startswith('acquisition started on'):
                 date_str = line.partition(':')[2].strip()
-                start_time = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S').timestamp()
+                acquisition_start = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S')
+            if line.startswith('technique started on'):
+                date_str = line.partition(':')[2].strip()
+                technique_start = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S')
             elif line.startswith('ei (v)'):
                 potentials_by_trial = [float(potential) for potential in line.split()[2:]]
+            elif line.startswith('ti (h:m:s)'):
+                duration_by_trial = []
+                for duration in line.split()[2:]:
+                    components = [float(component) for component in duration.split(':')]
+                    duration_by_trial.append(timedelta(
+                        hours=components[0], minutes=components[1], seconds=components[2]))
 
+                total_duration = timedelta()
+                start_time_by_trial = []
+                for duration in duration_by_trial:
+                    # NOTE: We can safely reference `start_time` here since its row always comes first in metadata.
+                    start_time_by_trial.append((technique_start + total_duration))
+                    total_duration += duration
+
+        # NOTE: 'time/s' field represents offset from acquisition start, NOT technique start.
         data_fields = ['Ns', 'time/s', '<I>/mA']
         # Header row for data will always be last line of metadata;
         # this line was just read in final iteration of above loop
@@ -127,22 +146,13 @@ class CA:
         potentials_dict = { float(index): potential for index, potential in enumerate(potentials_by_trial) }
         current_to_resistance = lambda row: [row[1], potentials_dict[row[0]] / row[2]]
         resistance_vs_time = np.array([current_to_resistance(row) for row in current_vs_time])
-
-        # NOTE: One 'trial' is one fixed potential time period;
-        # a CA run is usually made up of multiple trials.
-        indices_by_trial = [0]
-        curr_trial = 0
-        for row_index in range(current_vs_time.shape[0]):
-            next_trial = current_vs_time[row_index][0]
-            if curr_trial != next_trial:
-                indices_by_trial.append(row_index)
-                curr_trial = next_trial
+        # We don't need the trial # field (Ns) anymore, so delete it to free a couple kB
         current_vs_time = np.delete(current_vs_time, obj=0, axis=1)
 
         return {
-            'start_time': start_time,
+            'acquisition_start': acquisition_start,
             'current_vs_time': current_vs_time,
             'resistance_vs_time': resistance_vs_time,
-            'indices_by_trial': indices_by_trial,
+            'start_time_by_trial': start_time_by_trial,
             'potentials_by_trial': potentials_by_trial
         }
