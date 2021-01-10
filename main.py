@@ -175,7 +175,7 @@ class ApplicationWindow(QMainWindow):
         """
         experiment_params, gases_by_channel, parsed_file_input = [all_inputs[key] for key in ['experiment_params', 'gases_by_channel', 'parsed_file_input']]
 
-        active_channels = [channel for channel in channels if parsed_file_input[channel]]
+        active_channels = [channel for channel in channels if parsed_file_input[channel]['data']]
         if not active_channels:
             m = platform_messagebox(
                 parent=self, text='Please select at least one injection file.',

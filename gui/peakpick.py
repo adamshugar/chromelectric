@@ -1,369 +1,24 @@
+"""
+A graphical view of the GC injection list (all channels at once) for use in quickly integrating peaks.
+These peak integrations are the main data used to generate the final output file.
+"""
 from PySide2.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QComboBox, QSizePolicy, QFrame, QSpacerItem,
-    QHBoxLayout, QPushButton, QLineEdit, QLabel, QGridLayout, QLayout, QScrollArea, QMessageBox)
-from PySide2.QtCore import Signal, Slot, Qt
-from PySide2.QtGui import QFont, QIntValidator
+    QPushButton, QLabel, QGridLayout, QLayout, QScrollArea, QMessageBox)
+from PySide2.QtCore import Qt
+import numpy as np
 import matplotlib
 from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from datetime import timedelta
+from math import nan, isnan
+from functools import reduce
 import gui
 from gui.graphshared import Pagination, GraphPushButton
-import numpy as np
-import os, re, sys
-import json
-from util import is_windows
-from datetime import datetime, timedelta
-from enum import Enum
-import math
-from numpy.polynomial.polynomial import Polynomial
-from functools import reduce
 import physcalc
-import csv
-matplotlib.use('Qt5Agg')
 import integrate
-class filetype:
-    GC = 'asc'
-class GC:
-    suffix_regex = rf'(\d+)(?:\.)+(?:{filetype.GC})$'
 
-    @staticmethod
-    # Parse raw data from a single GC injection into a numpy array with metadata fields
-    def parse_file(handle):
-        # Parse relevant information from metadata lines at start of file
-        # Metadata lines begin with <FIELD_NAME> (might contain spaces)
-        meta_count = 0
-        line = handle.readline()
-        while match := re.search(r'<([A-Za-z ]*)>', line):
-            meta_count += 1
-            field_name = match.group(1).lower()
-            val_str = line.partition('=')[2].strip()
-
-            if field_name == 'date':
-                # E.g. '12-02-2020' is represented as '12- 2-2020' for some reason
-                date_string = val_str.replace(' ', '0')
-            elif field_name == 'time':
-                time_string = val_str.replace(' ', '0')
-            elif field_name == 'rate':
-                # Find GC sample rate in readings per second (Hz); can be decimal
-                sample_rate = float(re.search(r'\d+(.\d+)?', line).group())
-            elif field_name == 'size':
-                # Total number of readings collected during the current injection
-                num_readings = int(re.search(r'\d+', line).group())
-
-            line = handle.readline()
-
-        handle.seek(os.SEEK_SET)
-        # Data lines have the form n,n for an integer n (second copy on each line is redundant)
-        potentials = np.genfromtxt(fname=handle, comments=',', skip_header=meta_count)
-
-        # Build return object with metadata
-        run_duration = num_readings / sample_rate # In seconds
-        time_increments = np.linspace(0, run_duration, potentials.size)
-        warning = potentials.size != num_readings # Indicates file might be truncated prematurely
-        start_time = datetime.strptime(f'{date_string} {time_string}', r'%m-%d-%Y %H:%M:%S')
-        return {
-            'warning': warning,
-            'start_time': start_time,
-            'x': time_increments,
-            'y': potentials / 1000 # Convert from microvolts to millivolts to match calibration curves
-        }
-    
-    @staticmethod
-    def parse_list(raw_list):
-        parsed_list = {}
-        for index, path in raw_list.items():
-            try:
-                handle = open(path, 'r')
-            except IOError:
-                return index
-            
-            try:
-                parsed_list[index] = GC.parse_file(handle)
-            except Exception: # Fails safely for GA files with improper meta or data format
-                handle.close()
-                return index
-            else:
-                handle.close()
-
-        return parsed_list
-
-    @staticmethod
-    # Using the file inputted by the user, find all other GC files in the run
-    # assuming an auto-increment scheme of <filepath>/<shared filename><#>.<GC extension>
-    def find_list(filepath):
-        head, tail = os.path.split(filepath)
-        user_input_match = re.search(GC.suffix_regex, tail, re.IGNORECASE)
-        if user_input_match is None:
-            return None # User supplied an invalid file (didn't have <#> suffix)
-        shared_filename = tail[:-len(user_input_match.group(0))]
-
-        paths_by_index = {}
-        for entry in os.listdir(head):
-            if not os.path.isfile(os.path.join(head, entry)):
-                continue
-            match = re.search(shared_filename + GC.suffix_regex, entry, re.IGNORECASE)
-            if match:
-                file_num = int(match.group(1))
-                paths_by_index[file_num] = os.path.join(head, entry)
-        return paths_by_index
-class CA:
-    @staticmethod
-    def parse_file(filepath):
-        handle = open(filepath, 'r', encoding='latin-1')
-        handle.readline()
-        meta_total_str = handle.readline().partition(':')[2].strip() # Total meta count on line 2
-        meta_total = int(meta_total_str)
-
-        meta_curr = 3
-        while meta_curr < meta_total:
-            meta_curr += 1
-            line = handle.readline().lower()
-            if line.startswith('acquisition started on'):
-                date_str = line.partition(':')[2].strip()
-                acquisition_start = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S')
-            elif line.startswith('ei (v)'):
-                potentials_by_trial = [float(potential) for potential in line.split()[2:]]
-            elif line.startswith('ti (h:m:s)'):
-                duration_by_trial = []
-                for duration in line.split()[2:]:
-                    components = [float(component) for component in duration.split(':')]
-                    duration_by_trial.append(timedelta(
-                        hours=components[0], minutes=components[1], seconds=components[2]))
-
-                total_duration = timedelta()
-                total_dur_by_trial = [total_duration]
-                for duration in duration_by_trial:
-                    total_duration += duration
-                    total_dur_by_trial.append(total_duration)
-
-        # NOTE: 'time/s' field represents offset from acquisition start, NOT technique start.
-        data_fields = ['Ns', 'time/s', '<I>/mA']
-        # Header row for data will always be last line of metadata;
-        # this line was just read in final iteration of above loop
-        header_row = handle.readline().split('\t')
-        data_cols = [header_row.index(name) for name in data_fields]
-        current_vs_time = np.genfromtxt(fname=handle, usecols=data_cols)
-        handle.close()
-
-        # For quick lookup so we don't have to convert 'Ns' from float to int on every iteration
-        potentials_dict = { float(index): potential for index, potential in enumerate(potentials_by_trial) }
-        current_to_resistance = lambda row: [row[1], potentials_dict[row[0]] / row[2]]
-        resistance_vs_time = np.array([current_to_resistance(row) for row in current_vs_time])
-        # We don't need the trial # field (Ns) anymore, so delete it to free a couple kB
-        current_vs_time = np.delete(current_vs_time, obj=0, axis=1)
-
-        technique_start = acquisition_start + timedelta(seconds=current_vs_time[0, 0])
-        end_time_by_trial = [total_dur + technique_start for total_dur in total_dur_by_trial]
-
-        return {
-            'acquisition_start': acquisition_start,
-            'current_vs_time': current_vs_time,
-            'resistance_vs_time': resistance_vs_time,
-            'end_time_by_trial': end_time_by_trial,
-            'potentials_by_trial': potentials_by_trial
-        }
-channels = ['FID', 'TCD']
-class Pagination(QVBoxLayout):
-    page_changed = Signal(int, int)
-
-    def __init__(self, pages, start_index=0, handle_page_change=lambda old, new: None):
-        super().__init__()
-
-        self.pages = pages
-        self._curr_index = start_index
-
-        # Signal when page is changed so client can update accordingly
-        self.page_changed.connect(handle_page_change)
-
-        # Container for all items responsible for actual navigation: arrows, text entry box, "Go" button
-        self.controls_container = QHBoxLayout()
-        self.prev_button = GraphPushButton(text='←', font_size=32, fixed_width=80)
-        self.next_button = GraphPushButton(text='→', font_size=32, fixed_width=80)
-        self.prev_button.clicked.connect(self.handle_prev_click)
-        self.next_button.clicked.connect(self.handle_next_click)
-        self.update_button_states()
-
-        # Container for text entry box and "Go button" only
-        self.jump_container = QVBoxLayout()
-        IntAction(
-            layout=self.jump_container, text='Go', min_value=min(pages), max_value=max(pages),
-            on_click=self.handle_jump_click)
-
-        # Initialize overall layout
-        self.controls_container.addWidget(self.prev_button, alignment=Qt.AlignTop|Qt.AlignRight)
-        self.controls_container.addLayout(self.jump_container, alignment=Qt.AlignTop|Qt.AlignHCenter)
-        self.controls_container.addWidget(self.next_button, alignment=Qt.AlignTop|Qt.AlignLeft)
-        self.controls_container.setStretchFactor(self.prev_button, 1)
-        self.controls_container.setStretchFactor(self.next_button, 1)
-
-        self.indicator = PageIndicator(pages, start_index)
-        self.addLayout(self.indicator, alignment=Qt.AlignHCenter)
-        self.addLayout(self.controls_container, alignment=Qt.AlignHCenter)
-
-    @property
-    def curr_index(self):
-        return self._curr_index
-
-    @curr_index.setter
-    def curr_index(self, new_value):
-        old_value = self._curr_index
-        self._curr_index = new_value
-        self.page_changed.emit(self.pages[old_value], self.pages[new_value])
-        self.update_button_states()
-        self.indicator.set_index(new_value)
-
-    def update_button_states(self):
-        self.prev_button.setEnabled(True)
-        self.next_button.setEnabled(True)
-        if self.curr_index == 0:
-            self.prev_button.setDisabled(True)
-        if self.curr_index == len(self.pages) - 1:
-            self.next_button.setDisabled(True)
-
-    @Slot()
-    def handle_prev_click(self):
-        if self.curr_index > 0:
-            self.curr_index -= 1
-            
-    @Slot()
-    def handle_next_click(self):
-        if self.curr_index < len(self.pages) - 1:
-            self.curr_index += 1
-            
-    @Slot()
-    def handle_jump_click(self, text):
-        try:
-            new_page = int(text)
-            new_index = self.pages.index(new_page)
-        except ValueError:
-            return False
-        
-        if new_index != self.curr_index:
-            self.curr_index = new_index
-        return True
-class PageIndicator(QHBoxLayout):
-    def __init__(self, pages, start_index):
-        super().__init__()
-
-        self.pages = pages
-        self.labels = []
-        self.addStretch(1)
-        for _ in range(5):
-            label = QLabel('')
-            label.setFixedWidth(25)
-            label.setAlignment(Qt.AlignCenter)
-            self.labels.append(label)
-            self.addWidget(label, alignment=Qt.AlignCenter)
-        self.addStretch(1)
-        self.set_index(start_index)
-
-        font = self.labels[0].font()
-
-        font.setPointSize(12)
-        font.setWeight(QFont.ExtraLight)
-        self.labels[0].setFont(font)
-        self.labels[4].setFont(font)
-
-        font.setPointSize(14)
-        font.setWeight(QFont.Normal)
-        self.labels[1].setFont(font)
-        self.labels[3].setFont(font)
-
-        font.setPointSize(18)
-        font.setWeight(QFont.DemiBold)
-        self.labels[2].setFont(font)
-    
-    def set_index(self, index, should_resize=False):
-        text_vals = [str(self.pages[index]) if 0 <= index < len(self.pages) else '' for index in range(index - 2, index + 3)]
-        for index, val in enumerate(text_vals):
-            self.labels[index].setText(val)
-class GraphPushButton(QPushButton):
-    def __init__(self, text, font_size=None, fixed_width=None, fixed_height=None):
-        super().__init__(text=text)
-        if fixed_width:
-            self.setFixedWidth(fixed_width)
-        if fixed_height:
-            self.setFixedHeight(fixed_height)
-        if font_size:
-            font = self.font()
-            font.setPointSize(font_size)
-            self.setFont(font)
-class IntAction:
-    # Assumes `layout` is QHBoxLayout
-    def __init__(self, layout, text, min_value, max_value, on_click, insertion_index=None):
-        self.on_click = on_click
-        trigger_button = GraphPushButton(text=text)
-        trigger_button.clicked.connect(lambda: self.handle_click())
-
-        self.input_field = QLineEdit()
-        self.input_field.setAlignment(Qt.AlignHCenter)
-        self.input_field.setFixedWidth(80)
-        self.input_field.setMaxLength(5)
-        input_field_font = self.input_field.font()
-        input_field_font.setPointSize(16)
-        self.input_field.setFont(input_field_font)
-        self.input_field.setValidator(QIntValidator(min_value, max_value))
-        
-        if insertion_index is not None:
-            layout.insertWidget(insertion_index, self.input_field, alignment=Qt.AlignHCenter)
-            layout.insertWidget(insertion_index + 1, trigger_button, alignment=Qt.AlignHCenter)
-        else:
-            layout.addWidget(self.input_field, alignment=Qt.AlignHCenter)
-            layout.addWidget(trigger_button, alignment=Qt.AlignHCenter)
-
-    @Slot()
-    def handle_click(self):
-        did_succeed = self.on_click(self.input_field.text())
-        if did_succeed:
-            self.input_field.setText('')
-def get_settings():
-    return json.load(open(os.path.join(sys.path[0], 'chromelectric_settings.txt'), 'r'))
-def get_integration_params():
-        experiment_params = get_settings()
-        gases_by_channel = {}
-        for gas_name, attributes in experiment_params['attributes_by_gas_name'].items():
-            channel = attributes['channel']
-            if gases_by_channel.get(channel) is None:
-                gases_by_channel[channel] = []
-            gases_by_channel[channel].append(gas_name)
-        return (experiment_params, gases_by_channel)
-def bootstrap():
-    routes = {
-        'FID': '/Users/adamshugar/Desktop/Temp Data/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1-TBPS Trial 2/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1TBPS Trial 2 fid01.asc',
-        'TCD': '/Users/adamshugar/Desktop/Temp Data/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1-TBPS Trial 2/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1TBPS Trial 2 tcd01.asc'
-    }
-    
-    file_lists = {ch: GC.find_list(route) for ch, route in routes.items()}
-    parsed_file_input = {ch: {'data': GC.parse_list(file_list), 'path': routes[ch]} for ch, file_list in file_lists.items()}
-    CA_route = '/Users/adamshugar/Desktop/Temp Data/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1-TBPS Trial 2/20201125 - Ag - 10 sccm CO2 - 0p0005 mg cm2 - 1TBPS Trial 2 - CA_03_CA_C12.mpt'
-    parsed_file_input['CA'] = {
-        'data': CA.parse_file(CA_route),
-        'path': CA_route,
-    }
-    experiment_params, gases_by_channel = get_integration_params()
-
-    all_inputs = {
-        'experiment_params': experiment_params,
-        'gases_by_channel': gases_by_channel,
-        'parsed_file_input': parsed_file_input
-    }
-    launch_window(all_inputs, 'Integration and Analysis', '{} Injection #{}', 'Time (sec)', 'Potential (mV)')
-def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed='', parent=None):
-    """Platform-independent dialog box for quick messages and button-based user input"""
-    messagebox = QMessageBox(icon, '', '', buttons, parent)
-    messagebox.setIcon(icon)
-    messagebox.setDefaultButton(default_button)
-    if is_windows():
-        messagebox.setWindowTitle(QCoreApplication.applicationName())
-        messagebox.setText(text + informative)
-    else:
-        messagebox.setText(text)
-        if informative:
-            messagebox.setInformativeText(informative)
-    if detailed:
-        messagebox.setDetailedText(detailed)
-    return messagebox
-# BEGIN INTEGRATE MODULE
+matplotlib.use('Qt5Agg')
 
 class QHLine(QFrame):
     def __init__(self):
@@ -384,6 +39,7 @@ class ComboBox(QComboBox):
             self.removeItem(0)
 
 class Label(QLabel):
+    """Wrapper for Qt label that automatically resizes when text changes."""
     def __init__(self, text, font_size=None):
         super().__init__(text)
         if font_size:
@@ -498,7 +154,7 @@ class IntegralInfo:
         self.value_labels['Area'].setText("{:.3E}".format(integral['area']))
         self.value_labels['Moles'].setText("{:.3E}".format(integral['moles']))
         self.value_labels['Farad. eff.'].setText(
-            "{:.2f}%".format(integral['faradaic_efficiency']) if not math.isnan(integral['faradaic_efficiency']) else 'N/A')
+            "{:.2f}%".format(integral['faradaic_efficiency']) if not isnan(integral['faradaic_efficiency']) else 'N/A')
 
     def set_apply_all(self, on_apply_all):
         self.on_apply_all = on_apply_all
@@ -645,7 +301,7 @@ class IntegrateControls(QGridLayout):
         """
         self.mol_e = mol_e
         self.avg_current = avg_current
-        if math.isnan(self.mol_e) or math.isnan(self.avg_current):
+        if isnan(self.mol_e) or isnan(self.avg_current):
             self.fe_label.setText('Warning: This injection could not be\naligned to the supplied CA file.')
 
     def set_active_channels(self, active_channels, lines_by_channel):
@@ -804,7 +460,7 @@ class IntegrateControls(QGridLayout):
             for hide_index in range(n_integrals, n_labels):
                 self.peak_list_items[hide_index].hide()
         
-        if not math.isnan(self.mol_e):
+        if not isnan(self.mol_e):
             total_fe = sum([peak['faradaic_efficiency'] for peak in self.integrals])
             self.fe_label.setText('Total Faradaic efficiency: {:.2f}%'.format(total_fe))
 
@@ -902,7 +558,7 @@ class IntegrateWindow(QMainWindow):
                     Ru=experiment_params['solution_resistance'], pH=experiment_params['pH'],
                     deviation=experiment_params['ref_potential'])
             else:
-                combined_graph['uncorrected_voltage'] = combined_graph['corrected_voltage'] = math.nan
+                combined_graph['uncorrected_voltage'] = combined_graph['corrected_voltage'] = nan
             
         self.main = QWidget()
         self.setCentralWidget(self.main)
@@ -1059,175 +715,3 @@ class IntegrateWindow(QMainWindow):
         file_input = self.all_inputs['parsed_file_input']
         filepaths = {filetype: file_input[filetype]['path'] for filetype in file_input}
         output_analysis(filepaths, self.all_inputs['experiment_params'], self.combined_graphs, self.integrals_by_page)
-
-settings_header = """
-These are the settings used by Chromelectric while analyzing your experiment.
-
-You may use this file as a settings file for future runs of Chromelectric
-by copying and pasting it into the same directory as the Chromelectric program,
-naming the file `chromelectric_settings.txt`, and deleting this comment
-(i.e., the dashed line and all text above it).
-
-Note the following units used for each entry:
-
-calibration_value       mV*sec/ppm      peak area per ppm
-flow_rate               cm^3/min        sccm
-sample_vol              mL
-mix_vol                 mL
-solution_resistance     ohms
-ref_potential           V
--------------------------------------------------------------------------------
-
-"""
-
-integration_header = """
-This file contains raw data about each integrated peak. It is mostly
-intended for reference or sanity checking since Chromelectric automatically
-processes this data into more relevant final output (e.g. Faradaic efficiency).
-Most experimenters will rarely if ever need this file.
-
-See below for discussion on polynomial domain and window:
-https://stackoverflow.com/questions/52339907/numpy-polynomial-generation
-https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.html
-Note that directly mapping the polynomial to the true domain before
-recovering a numerical approximation will likely result in numerical instability.
-
-Units:
-- area = mV * sec
-- peak_start / peak_end = (sec, mV)
---------------------------------------------------------------------------------------------
-
-"""
-
-def make_dir(filepaths):
-    """
-    Make directory to contain all output files. Use the shared naming convention of the
-    injection files as the start of the directory name.
-    """
-    first_active_channel = [ch for ch in channels if filepaths[ch]][0]
-    sibling_path = os.path.split(filepaths[first_active_channel])
-    match = re.search(GC.suffix_regex, sibling_path[1], re.IGNORECASE)
-    shared_name = sibling_path[1][:-len(match.group(0))] if match else sibling_path[1]
-    # If file ends with 'fid01.asc' for example, also cut off the 'fid' as it is not part of the shared name
-    if match and shared_name.lower().endswith(first_active_channel.lower()):
-        shared_name = shared_name[:-len(first_active_channel)]
-    shared_name = shared_name.strip()
-    dirname = 'Chromelectric - ' + shared_name + f' - {datetime.now().strftime("%Y-%m-%d %I:%M:%S%p")}'
-    dirpath = os.path.join(sibling_path[0], dirname)
-
-    try:
-        os.mkdir(dirpath)
-    except FileExistsError as err:
-        m = platform_messagebox(
-            text='Attempted to create an output directory but the directory already exists.',
-            buttons=QMessageBox.Ok, icon=QMessageBox.Critical, default_button=QMessageBox.Ok,
-            detailed=f'Path `{dirpath}` already exists.')
-        result = m.exec()
-        return (None, None)
-    
-    return (dirpath, shared_name)
-
-def output_analysis(filepaths, experiment_params, graphs_by_page, integrals_by_page):
-    dirpath, shared_name = make_dir(filepaths)
-    if not dirpath:
-        return
-
-    settings_path = os.path.join(dirpath, 'Settings Used - ' + shared_name + '.txt')
-    with open(settings_path, 'w') as settings_handle:
-        settings_handle.write(settings_header)
-        json.dump(experiment_params, settings_handle, indent=4)
-
-    integration_path = os.path.join(dirpath, 'Integration Params - ' + shared_name + '.txt')
-    with open(integration_path, 'w') as integration_handle:
-        integration_handle.write(integration_header)
-        json.dump(get_integration_output(integrals_by_page), integration_handle, indent=4)
-
-    fieldnames, rows = graphs_to_csv(experiment_params, graphs_by_page, integrals_by_page)
-    csv_path = os.path.join(dirpath, 'Output - ' + shared_name + '.csv')
-    with open(csv_path, 'w') as csv_handle:
-        writer = csv.DictWriter(csv_handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-    # if experiment_params['plot_j']:
-    #     pass
-
-    # if experiment_params['plot_fe']:
-    #     pass
-    #     if experiment_params['fe_total']:
-    #         pass
-    # then generate 2 plots maybe from csv
-
-def graphs_to_csv(experiment_params, graphs_by_page, integrals_by_page):
-    j_str = lambda gas: f'{gas} Partial Current (mA)'
-    fe_str = lambda gas: f'{gas} Faradaic Efficiency (%)'
-
-    gases = experiment_params['attributes_by_gas_name'].keys()
-    gas_fields = [field for gas in gases for field in [j_str(gas), fe_str(gas)]]
-    fieldnames = [
-        'Injection Number', 'Uncorrected Voltage (V)', 'Corrected Voltage (V)',
-        *gas_fields, 'Total Current (mA)', 'Total Faradaic Efficiency (%)',
-    ]
-    rows = []
-    for page in graphs_by_page:
-        total_fe = 0
-        total_current = 0
-        gas_stats = {field: 0 for gas in gases for field in [j_str(gas), fe_str(gas)]}
-        for integral in integrals_by_page[page]:
-            curr_gas = integral['gas']
-            gas_stats[j_str(curr_gas)] += integral['partial_current']
-            gas_stats[fe_str(curr_gas)] += integral['faradaic_efficiency']
-            total_current += integral['partial_current']
-            total_fe += integral['faradaic_efficiency']
-        uv, cv = graphs_by_page[page]['uncorrected_voltage'], graphs_by_page[page]['corrected_voltage']
-        rows.append({
-            'Injection Number': page,
-            'Uncorrected Voltage (V)': uv if not math.isnan(uv) else 'No Alignment',
-            'Corrected Voltage (V)': cv if not math.isnan(cv) else 'No Alignment',
-            'Total Current (mA)': total_current,
-            'Total Faradaic Efficiency (%)': total_fe,
-            **gas_stats
-        })
-
-    return (fieldnames, rows)
-
-def get_integration_output(integrals_by_page):
-    result = {}
-    for page, integrals in integrals_by_page.items():
-        curr_list = []
-        for integral in integrals:
-            curr_integral = {
-                'gas': integral['gas'],
-                'area': integral['area'],
-                'moles': integral['moles'],
-                'integration_mode': integral['mode'],
-                'peak_start': integral['points'][0],
-                'peak_end': integral['points'][1]
-            }
-            baseline_pure = integral['baseline'][1]
-            # Convert numpy polynomial fit object to human-readable string of the form 'ax^0 + bx^1 + ...'
-            polystr = ' + '.join([f'{coef}x^{index}' for index, coef in enumerate(baseline_pure.coef)])
-            curr_integral['baseline'] = {
-                'polynomial': polystr,
-                'window': baseline_pure.window,
-                'domain': baseline_pure.domain
-            }
-            curr_list.append(curr_integral)
-        if curr_list:
-            result[page] = curr_list
-    return result
-
-# END INTEGRATE MODULE
-
-"""
-TODO:
-7. Also have user able to specify output location of files
-    - Output Location: No folder selected. (Leave unselected to indicate same folder as FID/TCD file.)
-
-<shared> - Partial Current Density.pdf
-<shared> - Faradaic Efficiency.pdf
-"""
-
-# BOOTSTRAP
-bootstrap()

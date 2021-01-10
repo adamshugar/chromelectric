@@ -17,6 +17,8 @@ from util import filetype
 # and classes are not meant to be instantiated.
 
 class GC:
+    suffix_regex = rf'(\d+)(?:\.)+(?:{filetype.GC})$'
+
     @staticmethod
     # Parse raw data from a single GC injection into a numpy array with metadata fields
     def parse_file(handle):
@@ -83,8 +85,7 @@ class GC:
     # assuming an auto-increment scheme of <filepath>/<shared filename><#>.<GC extension>
     def find_list(filepath):
         head, tail = os.path.split(filepath)
-        suffix_regex = rf'(\d+)\.(?:{filetype.GC})$'
-        user_input_match = re.search(suffix_regex, tail, re.IGNORECASE)
+        user_input_match = re.search(GC.suffix_regex, tail, re.IGNORECASE)
         if user_input_match is None:
             return None # User supplied an invalid file (didn't have <#> suffix)
         shared_filename = tail[:-len(user_input_match.group(0))]
@@ -93,7 +94,7 @@ class GC:
         for entry in os.listdir(head):
             if not os.path.isfile(os.path.join(head, entry)):
                 continue
-            match = re.search(shared_filename + suffix_regex, entry, re.IGNORECASE)
+            match = re.search(shared_filename + GC.suffix_regex, entry, re.IGNORECASE)
             if match:
                 file_num = int(match.group(1))
                 paths_by_index[file_num] = os.path.join(head, entry)
@@ -114,9 +115,6 @@ class CA:
             if line.startswith('acquisition started on'):
                 date_str = line.partition(':')[2].strip()
                 acquisition_start = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S')
-            if line.startswith('technique started on'):
-                date_str = line.partition(':')[2].strip()
-                technique_start = datetime.strptime(date_str, r'%m/%d/%Y %H:%M:%S')
             elif line.startswith('ei (v)'):
                 potentials_by_trial = [float(potential) for potential in line.split()[2:]]
             elif line.startswith('ti (h:m:s)'):
@@ -127,11 +125,10 @@ class CA:
                         hours=components[0], minutes=components[1], seconds=components[2]))
 
                 total_duration = timedelta()
-                start_time_by_trial = []
+                total_dur_by_trial = [total_duration]
                 for duration in duration_by_trial:
-                    # NOTE: We can safely reference `start_time` here since its row always comes first in metadata.
-                    start_time_by_trial.append((technique_start + total_duration))
                     total_duration += duration
+                    total_dur_by_trial.append(total_duration)
 
         # NOTE: 'time/s' field represents offset from acquisition start, NOT technique start.
         data_fields = ['Ns', 'time/s', '<I>/mA']
@@ -149,10 +146,13 @@ class CA:
         # We don't need the trial # field (Ns) anymore, so delete it to free a couple kB
         current_vs_time = np.delete(current_vs_time, obj=0, axis=1)
 
+        technique_start = acquisition_start + timedelta(seconds=current_vs_time[0, 0])
+        end_time_by_trial = [total_dur + technique_start for total_dur in total_dur_by_trial]
+
         return {
             'acquisition_start': acquisition_start,
             'current_vs_time': current_vs_time,
             'resistance_vs_time': resistance_vs_time,
-            'start_time_by_trial': start_time_by_trial,
+            'end_time_by_trial': end_time_by_trial,
             'potentials_by_trial': potentials_by_trial
         }

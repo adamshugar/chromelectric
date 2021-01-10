@@ -86,11 +86,6 @@ def correct_for_baseline(x_data, y_data, peak_start_x, peak_end_x):
         'baseline': (baseline_numeric, baseline_pure),
     }
 
-def polyfit_to_string(polyobj):
-    """Convert numpy polynomial fit object to human-readable string of the form 'a * x^0 + b * x^1 + ...'"""
-    # May be numerically unstable as we are converting from local window/basis to standard coordinate system.
-    return ' + '.join([f'{coef} * x^{index}' for index, coef in enumerate(polyobj.convert().coef)])
-
 def draw_point(coords, axes):
     """Draw a single (x, y) point on the given axes. Meant to draw points relevant in a given integration."""
     return axes.plot(coords[0], coords[1], color=BASELINE_COLOR, marker='o', markersize=6)[0]
@@ -176,9 +171,9 @@ def interpret_integral(integral, total_gas_mol, mol_e, calib_val, reduction_coun
     interpret the peak and return an integral object with additional fields to reflect
     the results of these calculations.
     """
-    current_peak_mol = total_gas_mol * (1e-6 * integral['area'] * calib_val) # 1e-6 for ppm to percentage
+    current_peak_mol = total_gas_mol * (1e-6 * integral['area'] / calib_val) # 1e-6 for ppm to fraction
     max_mol = mol_e / reduction_count
-    faradaic_eff = current_peak_mol / max_mol
+    faradaic_eff = (current_peak_mol / max_mol) * 100 # Convert from fraction to percentage
     partial_current = faradaic_eff * avg_current
     return {
         **integral,

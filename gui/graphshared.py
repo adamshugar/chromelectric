@@ -95,7 +95,7 @@ class PageIndicator(QHBoxLayout):
         self.addStretch(1)
         for _ in range(5):
             label = Label('')
-            label.setFixedWidth(20)
+            label.setFixedWidth(24)
             label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)
             self.addWidget(label, alignment=Qt.AlignCenter)

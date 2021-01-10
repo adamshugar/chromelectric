@@ -163,7 +163,10 @@ class CAFilePicker(FilePicker):
         return (filepath, parsed_data)
 
     def get_parsed_input(self):
-        return self.parsed_data
+        return {
+            'data': self.parsed_data,
+            'path': self.filepath
+        }
 
 class GCFilePicker(FilePicker):
     def __init__(self, file_label, file_type, label_text, button_text, msg_detail, resize_handler):
@@ -238,7 +241,10 @@ class GCFilePicker(FilePicker):
         return (filepath, parsed_list, sequences)
 
     def get_parsed_input(self):
-        return self.parsed_list
+        return {
+            'data': self.parsed_list,
+            'path': self.filepath
+        }
 
     @staticmethod
     def get_parsed_list(injection_file):
