@@ -2,6 +2,8 @@
 import re
 import sys
 import multiprocessing as mp
+import os
+import ntpath
 
 channels = ['FID', 'TCD']
 
@@ -77,3 +79,7 @@ def atomic_subprocess(obj, subprocess_attrname, target, args):
         new_subprocess = mp.Process(target=target, args=args)
         setattr(obj, subprocess_attrname, new_subprocess)
         new_subprocess.start()
+
+def platform_path(path):
+    # Gotta love Windows
+    return path.replace(os.sep, ntpath.sep) if is_windows() else return path
