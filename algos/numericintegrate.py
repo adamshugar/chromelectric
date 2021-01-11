@@ -1,3 +1,7 @@
+"""
+Module handling analytical functions related to numerical integration, as well as
+a bit of closely related matplotlib canvas drawing functionality.
+"""
 import numpy as np
 from numpy.polynomial.polynomial import Polynomial
 
@@ -174,7 +178,7 @@ def interpret_integral(integral, total_gas_mol, mol_e, calib_val, reduction_coun
     current_peak_mol = total_gas_mol * (1e-6 * integral['area'] / calib_val) # 1e-6 for ppm to fraction
     max_mol = mol_e / reduction_count
     faradaic_eff = (current_peak_mol / max_mol) * 100 # Convert from fraction to percentage
-    partial_current = faradaic_eff * avg_current
+    partial_current = faradaic_eff / 100 * avg_current
     return {
         **integral,
         'moles': current_peak_mol,

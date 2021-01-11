@@ -14,7 +14,7 @@ from PySide2.QtGui import QValidator, QIntValidator
 from math import ceil
 from util import is_nonnegative_int, is_nonnegative_float, safe_int, safe_float, channels
 import gui
-from gui import Label, QtPt
+from gui import Label, HLine, QtPt
 
 class MinMaxValidator(QValidator):
     def __init__(self, parent, _):
@@ -275,18 +275,12 @@ class ShortEntry:
     def get_input_ref(self):
         return self.entry
 
-class QHLine(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.setFrameShape(QFrame.HLine)
-        self.setFrameShadow(QFrame.Sunken)
-
 class NamedDivider(QHBoxLayout):
     def __init__(self, name):
         super().__init__()
         self.setSpacing(gui.PADDING)
         self.addWidget(Label(name), Qt.AlignLeft)
-        self.addWidget(QHLine(), Qt.AlignCenter)
+        self.addWidget(HLine(), Qt.AlignCenter)
 
 class CheckboxList(QVBoxLayout):
     def __init__(self, saved_settings):

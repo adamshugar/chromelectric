@@ -9,7 +9,7 @@ from PySide2.QtWidgets import (
     QTabWidget, QSpacerItem, QMessageBox)
 from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize
 import gui
-# import gui.integrate as integrate
+import gui.peakpick as peakpick
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
 from gui import platform_messagebox
@@ -220,7 +220,7 @@ class ApplicationWindow(QMainWindow):
         is_valid = self.validate_all_inputs(all_inputs)
         if is_valid:        
             atomic_subprocess(
-                obj=self, subprocess_attrname='integrate_subprocess', target=integrate.launch_window,
+                obj=self, subprocess_attrname='integrate_subprocess', target=peakpick.launch_window,
                 args=(all_inputs, 'Integration and Analysis', 'Integration for Injection {}', 'Time (sec)', 'Potential (mV)'))
 
 def main():

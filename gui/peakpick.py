@@ -13,18 +13,12 @@ from matplotlib.figure import Figure
 from datetime import timedelta
 from math import nan, isnan
 from functools import reduce
+from util import channels
 import gui
+from gui import HLine, ComboBox, Label, platform_messagebox
 from gui.graphshared import Pagination, GraphPushButton
-import physcalc
-import integrate
-
+from algos import physcalc, numericintegrate, outputwriter
 matplotlib.use('Qt5Agg')
-
-class QHLine(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.setFrameShape(QFrame.HLine)
-        self.setFrameShadow(QFrame.Sunken)
 
 def launch_window(all_inputs, window_title, ch_index_title, xlabel, ylabel):
     qapp = QApplication([''])
@@ -32,30 +26,6 @@ def launch_window(all_inputs, window_title, ch_index_title, xlabel, ylabel):
     app.show()
     qapp.exec_()
 
-class ComboBox(QComboBox):
-    """Wrapper for Qt "combo box" with convenience method to remove all choices."""
-    def removeAll(self):
-        for _ in range(self.count()):
-            self.removeItem(0)
-
-class Label(QLabel):
-    """Wrapper for Qt label that automatically resizes when text changes."""
-    def __init__(self, text, font_size=None):
-        super().__init__(text)
-        if font_size:
-            font = self.font()
-            font.setPointSize(font_size)
-            self.setFont(font)
-
-    def setText(self, text):
-        super().setText(text)
-        self.adjustSize()
-
-    def resizeEvent(self, event):
-        new_height = self.heightForWidth(self.width())
-        if new_height > 0:
-            self.setMinimumHeight(new_height)
-        
 class IntegralInfoContainer(QGridLayout):
     def __init__(self):
         super().__init__()
@@ -64,6 +34,10 @@ class IntegralInfoContainer(QGridLayout):
         self.setColumnStretch(2, 1)
 
 class IntegralInfo:
+    """
+    A utility class to display information related to an integrated peak. Intentionally
+    does not subclass a layout object so all instances can share the same grid.
+    """
     def __init__(self, container, row_index, integral=None, on_apply_all=None, on_delete=None, display_index=None):
         super().__init__()
         self.layout = container
@@ -85,7 +59,7 @@ class IntegralInfo:
         base_row = 0 if row_index == 0 else row_index * rows_per_item - 1 # No divider bar before first element (subtract 1)
         
         if row_index > 0:
-            self.line = QHLine()
+            self.line = HLine()
             self.layout.addWidget(self.line, base_row, 0, 1, 3)
             offset = 2
         else:
@@ -165,7 +139,16 @@ class IntegralInfo:
     def set_display_index(self, display_index):
         self.peak_label.setText(f'Peak #{display_index}')
 
-class DynamicScrollArea(QScrollArea):
+class VerticalScrollArea(QScrollArea):
+    """
+    Scroll area with variable, non-scrolling width accommodating its child widgets
+    and a scrollable height.
+    """
+    def __init__(self):
+        super().__init__()
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setWidgetResizable(True)
+
     def adjustWidth(self):
         self.widget().adjustSize()
         self.setFixedWidth(self.widget().width())
@@ -173,10 +156,11 @@ class DynamicScrollArea(QScrollArea):
 # Function handles to numerically integrate
 # TODO: Add Gaussian and Lorentzian
 INTEGRATION_BY_MODE = {
-    'Trapezoidal': integrate.trapz,
+    'Trapezoidal': numericintegrate.trapz,
 }
 
 class IntegrateControls(QGridLayout):
+    """'Sidebar' of controls managing creation, deletion, and duplication of all integrated peaks."""
     # Ordered list of instructions shown to user before picking each next point
     INSTRUCTIONS_BY_MODE = {
         'Trapezoidal': [
@@ -198,7 +182,7 @@ class IntegrateControls(QGridLayout):
     # Function handles to draw a graphical representation of the successful numerical integration
     # TODO: Add Gaussian and Lorentzian
     RENDER_BY_MODE = {
-        'Trapezoidal': integrate.trapz_draw,
+        'Trapezoidal': numericintegrate.trapz_draw,
     }
 
     def __init__(self, canvas, experiment_params, gases_by_channel, on_apply_all):
@@ -249,9 +233,7 @@ class IntegrateControls(QGridLayout):
         self.fe_label.setWordWrap(True)
         self.fe_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self.addWidget(self.fe_label, 6, 0, 1, 3, alignment=Qt.AlignHCenter)
-        peak_list_scroll = DynamicScrollArea()
-        peak_list_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        peak_list_scroll.setWidgetResizable(True)
+        peak_list_scroll = VerticalScrollArea()
         peak_list_frame = QFrame(peak_list_scroll)
         peak_list_container = QVBoxLayout()
         peak_list_container.setContentsMargins(gui.PADDING // 3, gui.PADDING, gui.PADDING, gui.PADDING)
@@ -339,14 +321,14 @@ class IntegrateControls(QGridLayout):
         render_func = IntegrateControls.RENDER_BY_MODE[mode]
         curr_artists = []
         curr_artists.extend(self.curr_integral['point_artists'])
-        curr_artists.extend(integrate.draw_integral(
+        curr_artists.extend(numericintegrate.draw_integral(
             x_data, y_data, integral_result, axes, len(self.integrals) + 1, render_func))
         
         self.integral_artists.append(curr_artists)
 
         gas_attrs = self.experiment_params['attributes_by_gas_name'][gas]
         calib_val, reduction_count = [gas_attrs.get(attr) for attr in ['calibration_value', 'reduction_count']]
-        final_integral = integrate.interpret_integral(
+        final_integral = numericintegrate.interpret_integral(
             integral=integral_result, total_gas_mol=self.experiment_params['mol_gas'],
             mol_e=self.mol_e, calib_val=calib_val, reduction_count=reduction_count,
             avg_current=self.avg_current)
@@ -365,14 +347,14 @@ class IntegrateControls(QGridLayout):
             return
         
         # If pick is valid, get coordinates, add to pick list, and draw selected point to screen
-        coords = integrate.line2d_point(event)
+        coords = numericintegrate.line2d_point(event)
         if coords not in self.curr_integral['points']:
             self.curr_integral['points'].append(coords)
-            pt = integrate.draw_point(coords, target_artist.axes)
+            pt = numericintegrate.draw_point(coords, target_artist.axes)
             self.curr_integral['point_artists'].append(pt)
             self.canvas.draw()
 
-        # If user has picked all the points needed, then process them and integrate.
+        # If user has picked all the points needed, then process and integrate them.
         # Otherwise, show instructions to pick next point.
         picked_count = len(self.curr_integral['points'])
         # 1 user-facing instruction per point needed
@@ -444,7 +426,7 @@ class IntegrateControls(QGridLayout):
             xy_data = line.get_xydata()
             x_data, y_data = xy_data[:, 0], xy_data[:, 1]
             render_func = IntegrateControls.RENDER_BY_MODE[integral['mode']]
-            artists = integrate.draw_integral(x_data, y_data, integral, line.axes, index + 1, render_func, draw_points=True)
+            artists = numericintegrate.draw_integral(x_data, y_data, integral, line.axes, index + 1, render_func, draw_points=True)
             self.integral_artists.append(artists)
         self.update_integral_list()
 
@@ -494,6 +476,7 @@ class IntegrateControls(QGridLayout):
         self.on_apply_all(self.integrals[index], display_index=index + 1)
         
 class IntegrateWindow(QMainWindow):
+    """Top-level window for the integration and analysis subprocess."""
     # In seconds; TODO: replace with calculation involving gas mixing in pre-GC vessel
     CURRENT_AVG_DURATION = 120
     # In seconds; allow injections that occur this many seconds later than a CA
@@ -677,7 +660,7 @@ class IntegrateWindow(QMainWindow):
 
             curr_integral = INTEGRATION_BY_MODE[integral['mode']](x, y, new_points)
             
-            final_integral = integrate.interpret_integral(
+            final_integral = numericintegrate.interpret_integral(
                 integral=curr_integral, total_gas_mol=experiment_params['mol_gas'],
                 mol_e=curr_graph['mol_e'], calib_val=gas_attrs['calibration_value'],
                 reduction_count=gas_attrs['reduction_count'], avg_current=curr_graph['avg_current'])
@@ -714,4 +697,16 @@ class IntegrateWindow(QMainWindow):
 
         file_input = self.all_inputs['parsed_file_input']
         filepaths = {filetype: file_input[filetype]['path'] for filetype in file_input}
-        output_analysis(filepaths, self.all_inputs['experiment_params'], self.combined_graphs, self.integrals_by_page)
+        success, err = outputwriter.exec(
+            filepaths, self.all_inputs['experiment_params'], self.combined_graphs, self.integrals_by_page)
+        if success:
+            m = platform_messagebox(
+                text='Successfully wrote output to folder.', buttons=QMessageBox.Ok,
+                icon=QMessageBox.Information, default_button=QMessageBox.Ok)
+            m.exec()
+            QApplication.quit()
+        else:
+            m = platform_messagebox(
+                text=err['text'], informative=err['informative'], detailed=err['detailed'],
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical, default_button=QMessageBox.Ok)
+            result = m.exec()

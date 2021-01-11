@@ -1,5 +1,5 @@
 """
-GUI components to pick GC & CA files from disc and launch windows in which
+GUI components to pick GC & CA files from disk and launch windows in which
 graphs of the chosen files can be viewed.
 """
 import os

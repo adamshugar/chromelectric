@@ -1,5 +1,5 @@
 """GUI-specific constants and util functions"""
-from PySide2.QtWidgets import QLabel, QApplication, QMessageBox
+from PySide2.QtWidgets import QLabel, QApplication, QMessageBox, QFrame, QComboBox
 from util import is_windows
 
 # Standard padding for any widget, in pixels
@@ -10,16 +10,36 @@ STRING_WIDTH = 10
 INT_WIDTH = 5
 FLOAT_WIDTH = 8
 
+class HLine(QFrame):
+    """A horizontal line."""
+    def __init__(self):
+        super().__init__()
+        self.setFrameShape(QFrame.HLine)
+        self.setFrameShadow(QFrame.Sunken)
+
 class Label(QLabel):
-    """Auto-resizing wrapper for QLabel"""
-    def setText(self, str):
-        super().setText(str)
+    """Wrapper for Qt label that automatically resizes when text changes."""
+    def __init__(self, text='', font_size=None):
+        super().__init__(text)
+        if font_size:
+            font = self.font()
+            font.setPointSize(font_size)
+            self.setFont(font)
+
+    def setText(self, text):
+        super().setText(text)
         self.adjustSize()
 
     def resizeEvent(self, event):
         new_height = self.heightForWidth(self.width())
         if new_height > 0:
             self.setMinimumHeight(new_height)
+
+class ComboBox(QComboBox):
+    """Wrapper for Qt "combo box" with convenience method to remove all choices."""
+    def removeAll(self):
+        for _ in range(self.count()):
+            self.removeItem(0)
 
 def platform_messagebox(text, buttons, icon, default_button=None, informative='', detailed='', parent=None):
     """Platform-independent dialog box for quick messages and button-based user input"""
