@@ -75,6 +75,9 @@ class GeneralParams(QVBoxLayout):
             **self.checkbox_list.get_parsed_input()
         }
     
+    def get_fields(self):
+        return self.short_entry_list.get_fields()
+    
 class FileAnalysis(QVBoxLayout):
     """Wrapper class for GUI to pick and view GC/CA files."""
     def __init__(self, on_click_analysis, resize_handler):
@@ -168,7 +171,7 @@ class ApplicationWindow(QMainWindow):
             gases_by_channel[channel].append(gas_name)
         return (experiment_params, gases_by_channel)
     
-    def validate_all_inputs(self, all_inputs):
+    def validate_all_inputs(self, all_inputs, entry_fields):
         """
         Validates all relevant parameters and files for subsequent integration and analysis, and alerts
         the user via dialog boxes of any validation failure. Returns true if valid, false otherwise.
@@ -202,10 +205,21 @@ class ApplicationWindow(QMainWindow):
                 parent=self, text=f"Duplicate gas(es) found: {', '.join(experiment_params['duplicate_gases'])}.",
                 informative='The highest numbered gas in each case will be used. Continue?',
                 buttons=QMessageBox.Ok | QMessageBox.Cancel, default_button=QMessageBox.Cancel,
-                icon=QMessageBox.Critical)
+                icon=QMessageBox.Warning)
             result = m.exec()
             if result == QMessageBox.Cancel:
                 return False
+
+        missing_fields = [field for field in entry_fields if experiment_params[field] is None]
+        if missing_fields:
+            m = platform_messagebox(
+                parent=self, text=f"Unspecified fields found.",
+                informative='Please populate the missing fields under "General Parameters" before analysis.',
+                detailed=f"Missing fields: {', '.join(missing_fields)}",
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
+            m.exec()
+            return False
+        
         return True
 
     def handle_click_analysis(self, parsed_file_input):
@@ -217,7 +231,7 @@ class ApplicationWindow(QMainWindow):
             'gases_by_channel': gases_by_channel,
             'parsed_file_input': parsed_file_input
         }
-        is_valid = self.validate_all_inputs(all_inputs)
+        is_valid = self.validate_all_inputs(all_inputs, self.general_params.get_fields())
         if is_valid:        
             atomic_subprocess(
                 obj=self, subprocess_attrname='integrate_subprocess', target=peakpick.launch_window,

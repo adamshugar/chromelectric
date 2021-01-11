@@ -58,16 +58,17 @@ Units:
 
 def exec(filepaths, experiment_params, graphs_by_page, integrals_by_page):
     """Write final output of analysis to multiple files. Returns True on success, False otherwise."""
-    dirpath, shared_name, err = make_dir(filepaths)
+    suffix = f' - {datetime.now().strftime("%Y-%m-%d %I:%M:%S%p")}'
+    dirpath, shared_name, err = make_dir(filepaths, suffix)
     if not dirpath:
         return (False, err)
 
-    settings_path = os.path.join(dirpath, 'Settings Used - ' + shared_name + '.txt')
+    settings_path = os.path.join(dirpath, 'Settings Used - ' + shared_name + suffix + '.txt')
     with open(settings_path, 'w') as settings_handle:
         settings_handle.write(settings_header)
         json.dump(experiment_params, settings_handle, indent=4)
 
-    integration_path = os.path.join(dirpath, 'Integration Params - ' + shared_name + '.txt')
+    integration_path = os.path.join(dirpath, 'Integration Params - ' + shared_name + suffix + '.txt')
     with open(integration_path, 'w') as integration_handle:
         integration_handle.write(integration_header)
         json.dump(get_integration_output(integrals_by_page), integration_handle, indent=4)
@@ -75,7 +76,7 @@ def exec(filepaths, experiment_params, graphs_by_page, integrals_by_page):
     gases = experiment_params['attributes_by_gas_name'].keys()
 
     fieldnames, rows = graphs_to_csv(gases, experiment_params, graphs_by_page, integrals_by_page)
-    csv_path = os.path.join(dirpath, 'Output - ' + shared_name + '.csv')
+    csv_path = os.path.join(dirpath, 'Output - ' + shared_name + suffix + '.csv')
     with open(csv_path, 'w') as csv_handle:
         writer = csv.DictWriter(csv_handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -84,15 +85,15 @@ def exec(filepaths, experiment_params, graphs_by_page, integrals_by_page):
     
     j_fig, fe_fig = generate_plots(gases, experiment_params, rows)
     if j_fig:
-        j_path = os.path.join(dirpath, 'Partial Current - ' + shared_name + '.pdf')
+        j_path = os.path.join(dirpath, 'Partial Current - ' + shared_name + suffix + '.pdf')
         j_fig.savefig(j_path, format='pdf')
     if fe_fig:
-        fe_path = os.path.join(dirpath, 'Faradaic Efficiency - ' + shared_name + '.pdf')
+        fe_path = os.path.join(dirpath, 'Faradaic Efficiency - ' + shared_name + suffix + '.pdf')
         fe_fig.savefig(fe_path, format='pdf')
 
     return (True, None)
 
-def make_dir(filepaths):
+def make_dir(filepaths, suffix):
     """
     Make directory to contain all output files. Use the shared naming convention of the
     injection files as the start of the directory name.
@@ -105,7 +106,7 @@ def make_dir(filepaths):
     if match and shared_name.lower().endswith(first_active_channel.lower()):
         shared_name = shared_name[:-len(first_active_channel)]
     shared_name = shared_name.strip()
-    dirname = 'Chromelectric - ' + shared_name + f' - {datetime.now().strftime("%Y-%m-%d %I:%M:%S%p")}'
+    dirname = 'Chromelectric - ' + shared_name + suffix
     dirpath = os.path.join(sibling_path[0], dirname)
 
     try:

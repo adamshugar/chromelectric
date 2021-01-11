@@ -406,6 +406,9 @@ class ShortEntryList(QGridLayout):
             self.addItem(QSpacerItem(1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum), self.curr_row, 4)
             self.curr_row += len(entry_dict)
 
+    def get_fields(self):
+        return [*self.fe_params.keys(), *self.v_correction_params.keys()]
+
     def get_parsed_input(self):
         result = {}
         entry_list = {**self.fe_params, **self.v_correction_params}
