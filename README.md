@@ -20,6 +20,7 @@ TODO: Distribute as a package for Linux users to install, perhaps via Conda. (De
 ### Nice-to-Haves
 
 - Show suspected min/max retention times on integration graphs so that those input fields are actually useful
+- Allow user to choose output folder location and name
 - Multithread the GC/CA file reads so the UI thread is never blocked (currently only a problem for reading **many** files or **very large** files)
 - Implement Gaussian and Lorentzian peak fitting in addition to trapezoidal integration
 - Write module to auto-generate GC calibration values from standard

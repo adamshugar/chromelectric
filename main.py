@@ -182,7 +182,7 @@ class ApplicationWindow(QMainWindow):
                 buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
             m.exec()
             return False
-        if not parsed_file_input['CA']:
+        if not parsed_file_input['CA']['data']:
             m = platform_messagebox(
                 parent=self, text='Please select a CA file.',
                 buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
@@ -221,7 +221,7 @@ class ApplicationWindow(QMainWindow):
         if is_valid:        
             atomic_subprocess(
                 obj=self, subprocess_attrname='integrate_subprocess', target=peakpick.launch_window,
-                args=(all_inputs, 'Integration and Analysis', 'Integration for Injection {}', 'Time (sec)', 'Potential (mV)'))
+                args=(all_inputs, 'Integration and Analysis', 'Integration for {} Injection {}', 'Time (sec)', 'Potential (mV)'))
 
 def main():
     qapp = QApplication([''])

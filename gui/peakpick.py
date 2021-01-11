@@ -497,8 +497,11 @@ class IntegrateWindow(QMainWindow):
               '3': { 'FID': graph_3_f }, '4': { 'TCD': graph_4_t } }
         """
         parsed_files = all_inputs['parsed_file_input']
-        all_indices = reduce(lambda accum, next: accum | next.keys(), [parsed_files[channel]['data'] for channel in channels], set())
-        self.combined_graphs = {index: {channel: parsed_files[channel]['data'].get(index) for channel in channels} for index in all_indices}
+        active_channels = [ch for ch in channels if parsed_files[ch]['data']]
+        all_indices = reduce(
+            lambda accum, curr: accum | curr.keys(),
+            [parsed_files[ch]['data'] for ch in active_channels], set())
+        self.combined_graphs = {index: {ch: parsed_files[ch]['data'].get(index) for ch in active_channels} for index in all_indices}
 
         CA_data = parsed_files['CA']['data']
         experiment_params = all_inputs['experiment_params']
@@ -600,7 +603,7 @@ class IntegrateWindow(QMainWindow):
     def graph_page(self, page):
         self.curr_page = page
         curr_graph = self.combined_graphs[page]
-        active_channels = [ch for ch in channels if curr_graph[ch]]
+        active_channels = [ch for ch in channels if curr_graph.get(ch)]
         self.axes = [self.canvas.figure.add_subplot(len(active_channels), 1, i) for i in range(1, len(active_channels) + 1)]
 
         lines_by_channel = {}

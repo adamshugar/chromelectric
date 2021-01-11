@@ -48,7 +48,7 @@ def platform_messagebox(text, buttons, icon, default_button=None, informative=''
     messagebox.setDefaultButton(default_button)
     if is_windows():
         messagebox.setWindowTitle(QCoreApplication.applicationName())
-        messagebox.setText(text + informative)
+        messagebox.setText(text + ' ' + informative)
     else:
         messagebox.setText(text)
         if informative:
