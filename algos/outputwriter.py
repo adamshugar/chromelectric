@@ -190,7 +190,7 @@ def generate_plots(gases, experiment_params, rows):
     def plot_fields(rows, xfield, yfield, label, axes):
         xydict = {
             row[xfield]: row[yfield] for row in rows \
-            if isinstance(row[yfield], numbers.Number)
+            if isinstance(row[xfield], numbers.Number) and isinstance(row[yfield], numbers.Number)
         }
         axes.plot(xydict.keys(), xydict.values(), **lineparams, label=label)
     
