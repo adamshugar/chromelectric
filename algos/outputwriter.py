@@ -15,7 +15,7 @@ from math import isnan
 import numbers
 import matplotlib
 from algos import fileparse
-from util import channels, platform_path
+from util import channels
 
 settings_header = """
 These are the settings used by Chromelectric while analyzing your experiment.
@@ -58,7 +58,7 @@ Units:
 
 def exec(filepaths, experiment_params, graphs_by_page, integrals_by_page):
     """Write final output of analysis to multiple files. Returns True on success, False otherwise."""
-    suffix = f' - {datetime.now().strftime("%Y-%m-%d %I:%M:%S%p")}'
+    suffix = f' - {datetime.now().strftime("%Y-%m-%d %I.%M.%S%p")}'
     dirpath, shared_name, err = make_dir(filepaths, suffix)
     if not dirpath:
         return (False, err)
@@ -99,7 +99,7 @@ def make_dir(filepaths, suffix):
     injection files as the start of the directory name.
     """
     first_active_channel = [ch for ch in channels if filepaths[ch]][0]
-    sibling_path = os.path.split(platform_path(filepaths[first_active_channel]))
+    sibling_path = os.path.split(filepaths[first_active_channel])
     match = re.search(fileparse.GC.suffix_regex, sibling_path[1], re.IGNORECASE)
     shared_name = sibling_path[1][:-len(match.group(0))] if match else sibling_path[1]
     # If file ends with 'fid01.asc' for example, also cut off the 'fid' as it is not part of the shared name
