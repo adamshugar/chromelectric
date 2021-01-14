@@ -2,6 +2,7 @@
 GUI components shared between the "carousel" graph view and the "integration" graph view.
 These include pagination functionality and some small utility classes.
 """
+from math import ceil
 from PySide2.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QFont, QIntValidator
@@ -90,12 +91,15 @@ class PageIndicator(QHBoxLayout):
     def __init__(self, pages, start_index):
         super().__init__()
 
+        default_pt = QtPt.default_pt()
+        center_pt = default_pt * 1.5
+
         self.pages = pages
         self.labels = []
         self.addStretch(1)
         for _ in range(5):
             label = Label('')
-            label.setFixedWidth(QtPt.pt_to_px(18) * 2)
+            label.setFixedWidth(QtPt.pt_to_px(center_pt) * 2)
             label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)
             self.addWidget(label, alignment=Qt.AlignCenter)
@@ -104,17 +108,17 @@ class PageIndicator(QHBoxLayout):
 
         font = self.labels[0].font()
 
-        font.setPointSize(12)
+        font.setPointSize(default_pt)
         font.setWeight(QFont.ExtraLight)
         self.labels[0].setFont(font)
         self.labels[4].setFont(font)
 
-        font.setPointSize(14)
+        font.setPointSize(ceil(default_pt * 1.25))
         font.setWeight(QFont.Normal)
         self.labels[1].setFont(font)
         self.labels[3].setFont(font)
 
-        font.setPointSize(18)
+        font.setPointSize(ceil(center_pt))
         font.setWeight(QFont.DemiBold)
         self.labels[2].setFont(font)
     

@@ -80,3 +80,7 @@ class QtPt:
         if font.pixelSize() != -1:
             return font.pixelSize()
         return QtPt.pt_to_px(font.pointSize())
+
+    @staticmethod
+    def default_pt():
+        return QApplication.font().pointSize()
