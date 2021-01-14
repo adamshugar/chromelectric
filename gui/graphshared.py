@@ -5,7 +5,7 @@ These include pagination functionality and some small utility classes.
 from PySide2.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QFont, QIntValidator
-from gui import Label
+from gui import Label, QtPt
 
 class Pagination(QVBoxLayout):
     page_changed = Signal(int, int)
@@ -95,7 +95,7 @@ class PageIndicator(QHBoxLayout):
         self.addStretch(1)
         for _ in range(5):
             label = Label('')
-            label.setFixedWidth(24)
+            label.setFixedWidth(QtPt.pt_to_px(18) * 2)
             label.setAlignment(Qt.AlignCenter)
             self.labels.append(label)
             self.addWidget(label, alignment=Qt.AlignCenter)
