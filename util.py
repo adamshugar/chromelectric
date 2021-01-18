@@ -1,7 +1,6 @@
 """Basic utility functions"""
 import re
 import sys
-import multiprocessing as mp
 import os
 import ntpath
 
@@ -70,12 +69,10 @@ def duration_to_str(duration_seconds):
 def is_windows():
     return sys.platform.startswith('win32') or sys.platform.startswith('cygwin')
 
-def atomic_subprocess(obj, subprocess_attrname, target, args):
+def atomic_window(obj, window_attrname, target, args):
     try:
-        subprocess = getattr(obj, subprocess_attrname)
+        window = getattr(obj, window_attrname)
     except AttributeError:
-        subprocess = None
-    if not subprocess or not subprocess.is_alive():
-        new_subprocess = mp.Process(target=target, args=args)
-        setattr(obj, subprocess_attrname, new_subprocess)
-        new_subprocess.start()
+        window = None
+    if not window or not window.isVisible():
+        setattr(obj, window_attrname, target(*args))

@@ -1,4 +1,3 @@
-import multiprocessing as mp
 from itertools import chain
 import json
 import sys
@@ -13,7 +12,7 @@ import gui.peakpick as peakpick
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
 from gui import platform_messagebox
-from util import channels, atomic_subprocess
+from util import channels, atomic_window
 
 class GeneralParams(QVBoxLayout):
     """Wrapper class for GUI to enter all relevant experimental parameters."""
@@ -60,12 +59,12 @@ class GeneralParams(QVBoxLayout):
             return
 
         try:
-            settings_handle = open(GeneralParams.SETTINGS_PATH, 'w')
+            settings_handle = open(GeneralParams.SETTINGS_PATH, 'w+')
             json.dump(self.get_parsed_input(), settings_handle, indent=4)
         except IOError as err:
             warning = platform_messagebox(
                 text='Unable to save settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
-                informative=f'Error while saving to settings file: {err.strerror}.', parent=self.parentWidget())
+                informative=f'Error while saving to settings file: {GeneralParams.SETTINGS_PATH}.', parent=self.parentWidget())
             warning.exec()
 
     def get_parsed_input(self):
@@ -233,8 +232,8 @@ class ApplicationWindow(QMainWindow):
         }
         is_valid = self.validate_all_inputs(all_inputs, self.general_params.get_fields())
         if is_valid:        
-            atomic_subprocess(
-                obj=self, subprocess_attrname='integrate_subprocess', target=peakpick.launch_window,
+            atomic_window(
+                obj=self, window_attrname='integrate_window', target=peakpick.launch_window,
                 args=(all_inputs, 'Integration and Analysis', 'Integration for {} Injection {}', 'Time (sec)', 'Potential (mV)'))
 
 def main():
@@ -245,5 +244,4 @@ def main():
     qapp.exec_()
 
 if __name__ == '__main__':
-    mp.set_start_method('spawn')
     main()

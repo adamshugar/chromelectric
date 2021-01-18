@@ -21,11 +21,9 @@ from algos import physcalc, numericintegrate, outputwriter
 matplotlib.use('Qt5Agg')
 
 def launch_window(all_inputs, window_title, ch_index_title, xlabel, ylabel):
-    qapp = QApplication([''])
-    QCoreApplication.setApplicationName('Chromelectric')
-    app = IntegrateWindow(all_inputs, window_title, ch_index_title, xlabel, ylabel)
-    app.show()
-    qapp.exec_()
+    w = IntegrateWindow(all_inputs, window_title, ch_index_title, xlabel, ylabel)
+    w.show()
+    return w
 
 class IntegralInfoContainer(QGridLayout):
     def __init__(self):
@@ -480,7 +478,7 @@ class IntegrateControls(QGridLayout):
         self.on_apply_all(self.integrals[index], display_index=index + 1)
         
 class IntegrateWindow(QMainWindow):
-    """Top-level window for the integration and analysis subprocess."""
+    """Top-level window for the integration and analysis window."""
     # In seconds; TODO: replace with calculation involving gas mixing in pre-GC vessel
     CURRENT_AVG_DURATION = 120
     # In seconds; allow injections that occur this many seconds later than a CA
@@ -711,7 +709,7 @@ class IntegrateWindow(QMainWindow):
                 text='Successfully wrote output to folder.', buttons=QMessageBox.Ok,
                 icon=QMessageBox.Information, default_button=QMessageBox.Ok, parent=self)
             m.exec()
-            QApplication.quit()
+            self.close()
         else:
             m = platform_messagebox(
                 text=err['text'], informative=err['informative'], detailed=err['detailed'],

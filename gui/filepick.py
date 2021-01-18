@@ -6,33 +6,47 @@ import os
 import textwrap
 from PySide2.QtWidgets import (
     QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog,
-    QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QMessageBox)
+    QGridLayout, QComboBox, QLayout, QSizePolicy, QCheckBox, QMessageBox, QWidget, QMainWindow)
 from PySide2.QtCore import Signal, Slot, Qt, QCoreApplication
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
 import numpy as np
 from util import (
     filetype, find_sequences, duration_to_str, sequences_to_str,
-    is_windows, atomic_subprocess, channels)
+    is_windows, atomic_window, channels)
 import algos.fileparse as fileparse
 import gui
 from gui import Label, platform_messagebox, retry_cancel
 import gui.carousel as carousel
 matplotlib.use('Qt5Agg')
 
-# Need to define graphing functions at top level in order to be "pickle-able" for multiprocessing.
-# See https://stackoverflow.com/questions/8804830/python-multiprocessing-picklingerror-cant-pickle-type-function.
-def single_graph(title, x, y, xlabel, ylabel):
-    fig = plt.figure(title)
-    ax = fig.add_subplot()
-    ax.plot(x, y)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    plt.show()
+def launch_single_graph(title, x, y, xlabel, ylabel):
+    w = SingleGraphWindow(title, x, y, xlabel, ylabel)
+    w.show()
+    return w
 
-def carousel_graph(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
-    carousel.launch_window(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
+class SingleGraphWindow(QMainWindow):
+    def __init__(self, title, x, y, xlabel, ylabel):
+        super().__init__()
+
+        self.setWindowTitle(title)
+        self.canvas = FigureCanvas(Figure())
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.addToolBar(self.toolbar)
+
+        self.main = QWidget()
+        self.setCentralWidget(self.main)
+        self.layout = QVBoxLayout(self.main)
+        self.layout.addWidget(self.canvas)
+
+        self.ax = self.canvas.figure.add_subplot()
+        self.ax.plot(x, y)
+        self.ax.set_title(title)
+        self.ax.set_xlabel(xlabel)
+        self.ax.set_ylabel(ylabel)
+        self.canvas.draw()
 
 class FilePicker(QGridLayout):
     MAX_DISPLAY_LEN = 70
@@ -71,7 +85,6 @@ class FilePicker(QGridLayout):
         while not file_picked:
             try:
                 detail_str = f' {self.msg_detail}' if len(self.msg_detail) > 0 else ''
-                platform_file_label = f'{self.file_label} (.{self.file_type})' if is_windows() else self.file_label
                 path, _ = QFileDialog.getOpenFileName(
                     None, f'Select a {self.file_label} file. {detail_str}',
                     '', f'{self.file_label} (*{self.file_type})')
@@ -114,15 +127,15 @@ class CAFilePicker(FilePicker):
     
     def on_click_current(self):
         data = self.parsed_data['current_vs_time']
-        atomic_subprocess(
-            obj=self, subprocess_attrname='current_subprocess', target=single_graph,
+        atomic_window(
+            obj=self, window_attrname='current_subprocess', target=launch_single_graph,
             args=('Current vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
             'Time (sec)', 'Current (mA)'))
 
     def on_click_resistance(self):
         data = self.parsed_data['resistance_vs_time']
-        atomic_subprocess(
-            obj=self, subprocess_attrname='resistance_subprocess', target=single_graph,
+        atomic_window(
+            obj=self, window_attrname='resistance_subprocess', target=launch_single_graph,
             args=('Resistance vs. Time in Cyclic Amperometry', data[:, 0], data[:, 1],
             'Time (sec)', 'Resistance (kΩ)'))
 
@@ -185,8 +198,8 @@ class GCFilePicker(FilePicker):
         self.parsed_container.addWidget(view_button)
 
     def on_click_view(self):
-        atomic_subprocess(
-            obj=self, subprocess_attrname='carousel_subprocess', target=carousel.launch_window,
+        atomic_window(
+            obj=self, window_attrname='carousel_window', target=carousel.launch_window,
             args=(
                 self.parsed_list, f'{self.file_label} Injection List View',
                 f'Potential vs. Time for {self.file_label} ' + 'Injection {}',
@@ -216,7 +229,7 @@ class GCFilePicker(FilePicker):
                 return (None, None, None)
         
             result = GCFilePicker.get_parsed_list(filepath)
-            parsed_list, sequences, recoverable = (result.get('parsed_list'), result.get('sequences'), result.get('recoverable'))
+            parsed_list, sequences, _ = (result.get('parsed_list'), result.get('sequences'), result.get('recoverable'))
             error_text, error_informative, error_detailed = (result.get('error_text'), result.get('error_informative'), result.get('error_detailed'))
             if not parsed_list: # If no list, then we failed, so need to re-pick
                 should_retry = retry_cancel(

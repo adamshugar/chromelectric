@@ -3,7 +3,7 @@ An interface for graphical viewing of a series of files.
 Offers easy pagination and overlay of other graphs on top of the current file being graphed.
 """
 from PySide2.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLineEdit, QGridLayout)
 from PySide2.QtCore import Signal, Slot, Qt
 from PySide2.QtGui import QFont, QIntValidator
@@ -14,10 +14,9 @@ from gui.graphshared import Pagination, IntAction, GraphPushButton
 matplotlib.use('Qt5Agg')
 
 def launch_window(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
-    qapp = QApplication([''])
-    app = CarouselWindow(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
-    app.show()
-    qapp.exec_()
+    w = CarouselWindow(graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel)
+    w.show()
+    return w
 
 class CarouselWindow(QMainWindow):
     def __init__(self, graph_list, window_title, index_title, multiple_title, legend_title, xlabel, ylabel):
