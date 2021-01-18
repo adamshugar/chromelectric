@@ -4,8 +4,8 @@ These peak integrations are the main data used to generate the final output file
 """
 from PySide2.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QComboBox, QSizePolicy, QFrame, QSpacerItem,
-    QPushButton, QLabel, QGridLayout, QLayout, QScrollArea, QMessageBox)
-from PySide2.QtCore import Qt
+    QPushButton, QLabel, QGridLayout, QLayout, QScrollArea, QMessageBox, QHBoxLayout)
+from PySide2.QtCore import Qt, QCoreApplication
 import numpy as np
 import matplotlib
 from matplotlib.backends.backend_qt5agg import FigureCanvas, NavigationToolbar2QT as NavigationToolbar
@@ -15,13 +15,14 @@ from math import nan, isnan
 from functools import reduce
 from util import channels
 import gui
-from gui import HLine, ComboBox, Label, platform_messagebox
+from gui import HLine, ComboBox, Label, platform_messagebox, get_scrollbar_thickness
 from gui.graphshared import Pagination, GraphPushButton
 from algos import physcalc, numericintegrate, outputwriter
 matplotlib.use('Qt5Agg')
 
 def launch_window(all_inputs, window_title, ch_index_title, xlabel, ylabel):
     qapp = QApplication([''])
+    QCoreApplication.setApplicationName('Chromelectric')
     app = IntegrateWindow(all_inputs, window_title, ch_index_title, xlabel, ylabel)
     app.show()
     qapp.exec_()
@@ -238,7 +239,10 @@ class IntegrateControls(QGridLayout):
         peak_list_container = QVBoxLayout()
         peak_list_container.setContentsMargins(gui.PADDING // 3, gui.PADDING, gui.PADDING, gui.PADDING)
         self.peak_list_grid = IntegralInfoContainer()
-        peak_list_container.addLayout(self.peak_list_grid)
+        grid_container = QHBoxLayout()
+        grid_container.addLayout(self.peak_list_grid)
+        grid_container.addSpacing(get_scrollbar_thickness())
+        peak_list_container.addLayout(grid_container)
         peak_list_container.addStretch(1)
         peak_list_frame.setLayout(peak_list_container)
         peak_list_frame.layout().setSizeConstraint(QLayout.SetFixedSize)
@@ -705,11 +709,11 @@ class IntegrateWindow(QMainWindow):
         if success:
             m = platform_messagebox(
                 text='Successfully wrote output to folder.', buttons=QMessageBox.Ok,
-                icon=QMessageBox.Information, default_button=QMessageBox.Ok)
+                icon=QMessageBox.Information, default_button=QMessageBox.Ok, parent=self)
             m.exec()
             QApplication.quit()
         else:
             m = platform_messagebox(
                 text=err['text'], informative=err['informative'], detailed=err['detailed'],
-                buttons=QMessageBox.Ok, icon=QMessageBox.Critical, default_button=QMessageBox.Ok)
+                buttons=QMessageBox.Ok, icon=QMessageBox.Critical, default_button=QMessageBox.Ok, parent=self)
             result = m.exec()

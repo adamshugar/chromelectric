@@ -1,5 +1,6 @@
 """GUI-specific constants and util functions"""
-from PySide2.QtWidgets import QLabel, QApplication, QMessageBox, QFrame, QComboBox
+from PySide2.QtWidgets import QLabel, QApplication, QMessageBox, QFrame, QComboBox, QStyle
+from PySide2.QtCore import QCoreApplication
 from util import is_windows
 
 # Standard padding for any widget, in pixels
@@ -48,7 +49,7 @@ def platform_messagebox(text, buttons, icon, default_button=None, informative=''
     messagebox.setDefaultButton(default_button)
     if is_windows():
         messagebox.setWindowTitle(QCoreApplication.applicationName())
-        messagebox.setText(text + ' ' + informative)
+        messagebox.setText(text + ' ' + (informative if informative else ''))
     else:
         messagebox.setText(text)
         if informative:
@@ -66,6 +67,9 @@ def retry_cancel(text, informative='', detailed='', icon=QMessageBox.Critical, p
         text=text, buttons=QMessageBox.Cancel | QMessageBox.Retry, default_button=QMessageBox.Retry,
         icon=icon, informative=informative, detailed=detailed, parent=parent)
     return messagebox.exec() == QMessageBox.Retry
+
+def get_scrollbar_thickness():
+    return QApplication.style().pixelMetric(QStyle.PM_ScrollBarExtent)
 
 class QtPt:
     @staticmethod
