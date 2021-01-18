@@ -76,3 +76,11 @@ def atomic_window(obj, window_attrname, target, args):
         window = None
     if not window or not window.isVisible():
         setattr(obj, window_attrname, target(*args))
+
+def get_script_path():
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running in PyInstaller bundle
+        return sys.argv[0]
+    else:
+        # Running in normal Python process
+        return os.path.abspath(__file__)

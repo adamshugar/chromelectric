@@ -12,16 +12,15 @@ import gui.peakpick as peakpick
 from gui.paraminput import GasList, ShortEntryList, CheckboxList
 from gui.filepick import FileList
 from gui import platform_messagebox
-from util import channels, atomic_window
+from util import channels, atomic_window, get_script_path
 
 class GeneralParams(QVBoxLayout):
     """Wrapper class for GUI to enter all relevant experimental parameters."""
     SETTINGS_FILE_NAME = 'chromelectric_settings.txt'
-    SETTINGS_PATH = os.path.join(sys.path[0], SETTINGS_FILE_NAME)
+    SETTINGS_PATH = os.path.join(os.path.split(get_script_path())[0], SETTINGS_FILE_NAME)
 
     def __init__(self, resize_handler):
         super().__init__()
-
         self.setSizeConstraint(QLayout.SetFixedSize)
         saved_settings = GeneralParams.load_settings()
 
@@ -59,12 +58,12 @@ class GeneralParams(QVBoxLayout):
             return
 
         try:
-            settings_handle = open(GeneralParams.SETTINGS_PATH, 'w+')
+            settings_handle = open(GeneralParams.SETTINGS_PATH, 'w')
             json.dump(self.get_parsed_input(), settings_handle, indent=4)
         except IOError as err:
             warning = platform_messagebox(
                 text='Unable to save settings', buttons=QMessageBox.Ok, icon=QMessageBox.Warning,
-                informative=f'Error while saving to settings file: {GeneralParams.SETTINGS_PATH}.', parent=self.parentWidget())
+                informative=f'Error while saving to settings file: {err.strerror}.', parent=self.parentWidget())
             warning.exec()
 
     def get_parsed_input(self):

@@ -396,8 +396,10 @@ class IntegrateControls(QGridLayout):
         self.curr_integral['is_active'] = False
 
         if not did_succeed:
-            for point in self.curr_integral['point_artists']:
+            artists = self.curr_integral.get('point_artists') if self.curr_integral.get('point_artists') else []
+            for point in artists:
                 point.remove()
+        self.curr_integral['point_artists'] = []
         self.canvas.draw()
 
     def get_integrals_and_clear(self):
@@ -516,7 +518,7 @@ class IntegrateWindow(QMainWindow):
         # Compute values that vary for each injection, namely: voltage, average current (i.e.
         # averaged over the relevant timescale immediately preceding the injection) and moles
         # of electrons (this average current times the "flow-seconds" of gas collected)
-        for page, combined_graph in self.combined_graphs.items():
+        for _, combined_graph in self.combined_graphs.items():
             # Assume that all channels for the current injection have the same timestamp
             any_channel = [ch for ch in combined_graph.values() if ch is not None][0]
             # In milliamperes
@@ -598,7 +600,7 @@ class IntegrateWindow(QMainWindow):
         and saving of integration-related information.
         """
         self.integrals_by_page[page] = self.controls.get_integrals_and_clear()
-        
+        self.controls.stop_integration(did_succeed=False)
         for ax in self.axes:
             ax.remove()
 
