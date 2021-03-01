@@ -152,12 +152,6 @@ class VerticalScrollArea(QScrollArea):
         self.widget().adjustSize()
         self.setFixedWidth(self.widget().width())
 
-# Function handles to numerically integrate
-# TODO: Add Gaussian and Lorentzian
-INTEGRATION_BY_MODE = {
-    'Trapezoidal': numericintegrate.trapz,
-}
-
 class IntegrateControls(QGridLayout):
     """'Sidebar' of controls managing creation, deletion, and duplication of all integrated peaks."""
     # Ordered list of instructions shown to user before picking each next point
@@ -176,12 +170,6 @@ class IntegrateControls(QGridLayout):
             'Select the extremum of the peak (highest or lowest point).',
             'Select the end of the peak (rightmost point).'
         ],
-    }
-
-    # Function handles to draw a graphical representation of the successful numerical integration
-    # TODO: Add Gaussian and Lorentzian
-    RENDER_BY_MODE = {
-        'Trapezoidal': numericintegrate.trapz_draw,
     }
 
     def __init__(self, canvas, experiment_params, gases_by_channel, on_apply_all):
@@ -205,9 +193,15 @@ class IntegrateControls(QGridLayout):
 
         # Peak parameter selection
         self.peak_type = QComboBox()
-        self.peak_type.addItems(INTEGRATION_BY_MODE.keys())
-        self.addWidget(Label('Peak Type'), 0, 2, alignment=Qt.AlignHCenter)
-        self.addWidget(self.peak_type, 1, 2, alignment=Qt.AlignHCenter)
+        self.peak_type.addItems(numericintegrate.INTEGRATION_BY_MODE.keys())
+        self.addWidget(Label('Peak Type'), 2, 0, alignment=Qt.AlignHCenter)
+        self.addWidget(self.peak_type, 3, 0, alignment=Qt.AlignHCenter)
+
+        # Baseline type selection
+        self.baseline_type = QComboBox()
+        self.baseline_type.addItems(numericintegrate.BASELINES_BY_TYPE.keys())
+        self.addWidget(Label('Baseline Type'), 2, 1, alignment=Qt.AlignHCenter)
+        self.addWidget(self.baseline_type, 3, 1, alignment=Qt.AlignHCenter)
 
         # Integration start/stop and information
         self.integrate_button = GraphPushButton(text='Start Integration')
@@ -221,17 +215,17 @@ class IntegrateControls(QGridLayout):
         self.integrate_instruction.setWordWrap(True)
         self.integrate_label.setAlignment(Qt.AlignHCenter)
         self.integrate_instruction.setAlignment(Qt.AlignHCenter)
-        self.addWidget(self.integrate_button, 2, 0, 1, 3, alignment=Qt.AlignHCenter)
-        self.addWidget(self.integrate_label, 3, 0, 1, 3, alignment=Qt.AlignHCenter)
-        self.addWidget(self.integrate_instruction, 4, 0, 1, 3, alignment=Qt.AlignHCenter)
+        self.addWidget(self.integrate_button, 4, 0, 1, 2, alignment=Qt.AlignHCenter)
+        self.addWidget(self.integrate_label, 5, 0, 1, 2, alignment=Qt.AlignHCenter)
+        self.addWidget(self.integrate_instruction, 6, 0, 1, 2, alignment=Qt.AlignHCenter)
 
-        self.addItem(QSpacerItem(1, gui.PADDING), 5, 0, 1, 3)
+        self.addItem(QSpacerItem(1, gui.PADDING), 6, 0, 1, 2)
         # List of peak information cards for current injection (plus overall Faradaic efficiency)
         self.fe_label = Label('Total Faradaic efficiency: 0%')
         self.fe_label.setAlignment(Qt.AlignHCenter)
         self.fe_label.setWordWrap(True)
         self.fe_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.addWidget(self.fe_label, 6, 0, 1, 3, alignment=Qt.AlignHCenter)
+        self.addWidget(self.fe_label, 7, 0, 1, 2, alignment=Qt.AlignHCenter)
         peak_list_scroll = VerticalScrollArea()
         peak_list_frame = QFrame(peak_list_scroll)
         peak_list_container = QVBoxLayout()
@@ -248,10 +242,10 @@ class IntegrateControls(QGridLayout):
         self.peak_list_frame = peak_list_frame
         peak_list_scroll.setAlignment(Qt.AlignHCenter)
         peak_list_scroll.hide()
-        self.addWidget(peak_list_scroll, 7, 0, 1, 3, alignment=Qt.AlignHCenter)
+        self.addWidget(peak_list_scroll, 8, 0, 1, 2, alignment=Qt.AlignHCenter)
         self.peak_list_scroll = peak_list_scroll
         self.peak_list_items = []
-        self.setRowStretch(7, 1)
+        self.setRowStretch(8, 1)
 
         # Integration state variables container
         self.curr_integral = { 'is_active': False }
@@ -317,10 +311,11 @@ class IntegrateControls(QGridLayout):
         """
         mode, gas = self.curr_integral['mode'], self.curr_integral['gas']
         x_data, y_data = line_xy[:, 0], line_xy[:, 1]
-        integral_result = INTEGRATION_BY_MODE[mode](
-            x_data=x_data, y_data=y_data, points=self.curr_integral['points'])
+        integral_result = numericintegrate.INTEGRATION_BY_MODE[mode](
+            x_data=x_data, y_data=y_data, points=self.curr_integral['points'],
+            baseline_type=self.curr_integral['baseline_type'])
 
-        render_func = IntegrateControls.RENDER_BY_MODE[mode]
+        render_func = numericintegrate.RENDER_BY_MODE[mode]
         curr_artists = []
         curr_artists.extend(self.curr_integral['point_artists'])
         curr_artists.extend(numericintegrate.draw_integral(
@@ -381,6 +376,7 @@ class IntegrateControls(QGridLayout):
         self.curr_integral['points'] = []
         self.curr_integral['point_artists'] = []
         self.curr_integral['instructions'] = IntegrateControls.INSTRUCTIONS_BY_MODE[self.curr_integral['mode']]
+        self.curr_integral['baseline_type'] = self.baseline_type.currentText()
 
         self.integrate_button.setText('Cancel Integration')
         self.integrate_label.setText(
@@ -429,7 +425,7 @@ class IntegrateControls(QGridLayout):
             line = self.lines_by_channel[channel]
             xy_data = line.get_xydata()
             x_data, y_data = xy_data[:, 0], xy_data[:, 1]
-            render_func = IntegrateControls.RENDER_BY_MODE[integral['mode']]
+            render_func = numericintegrate.RENDER_BY_MODE[integral['mode']]
             artists = numericintegrate.draw_integral(x_data, y_data, integral, line.axes, index + 1, render_func, draw_points=True)
             self.integral_artists.append(artists)
         self.update_integral_list()
@@ -487,6 +483,49 @@ class IntegrateWindow(QMainWindow):
     # constant-voltage trial to still be aligned to that trial
     MISALIGNMENT_TOLERANCE = 10
 
+    def ca_init(self, ca_data, experiment_params):
+        # Compute values that vary for each injection, namely: voltage, average current (i.e.
+        # averaged over the relevant timescale immediately preceding the injection) and moles
+        # of electrons (this average current times the "flow-seconds" of gas collected)
+
+        if not ca_data:
+            for _, combined_graph in self.combined_graphs.items():
+                for attr in ['avg_current', 'mol_e', 'uncorrected_voltage', 'corrected_voltage']:
+                    combined_graph[attr] = nan
+            return
+
+        for _, combined_graph in self.combined_graphs.items():
+            # Assume that all channels for the current injection have the same timestamp
+            any_channel = [ch for ch in combined_graph.values() if ch is not None][0]
+            # In milliamperes
+            combined_graph['avg_current'] = physcalc.average_current(
+                cyclic_amp=ca_data, end_time=any_channel['start_time'], duration=IntegrateWindow.CURRENT_AVG_DURATION)
+            combined_graph['mol_e'] = physcalc.electrons_from_amps(
+                A=combined_graph['avg_current'] / 1000, t=experiment_params['flow_seconds'])
+
+            # Find uncorrected voltage of CA trial which the current injection was measuring
+            tolerance = timedelta(seconds=IntegrateWindow.MISALIGNMENT_TOLERANCE)
+            # Start and end CA trial timestamps such that, if an injection has a timestamp
+            # in this range, it will be aligned to that trial.
+            end_times = ca_data['end_time_by_trial']
+            trial_end_ranges = [
+                ((end_times[index - 1] + tolerance).timestamp(), (end_times[index] + tolerance).timestamp()) \
+                for index in range(1, len(end_times))
+            ]
+            injection_timestamp = any_channel['start_time'].timestamp()
+            matching_trials = [
+                index for index, trial_range in enumerate(trial_end_ranges) \
+                if trial_range[0] <= injection_timestamp <= trial_range[1]
+            ]
+            if matching_trials:
+                combined_graph['uncorrected_voltage'] = ca_data['potentials_by_trial'][matching_trials[0]]
+                combined_graph['corrected_voltage'] = physcalc.correct_voltage(
+                    V=combined_graph['uncorrected_voltage'], I=combined_graph['avg_current'] / 1000,
+                    Ru=experiment_params['solution_resistance'], pH=experiment_params['pH'],
+                    deviation=experiment_params['ref_potential'])
+            else:
+                combined_graph['uncorrected_voltage'] = combined_graph['corrected_voltage'] = nan
+
     def __init__(self, all_inputs, window_title, ch_index_title, xlabel, ylabel):
         super().__init__()
         self.all_inputs = all_inputs
@@ -507,7 +546,6 @@ class IntegrateWindow(QMainWindow):
             [parsed_files[ch]['data'] for ch in active_channels], set())
         self.combined_graphs = {index: {ch: parsed_files[ch]['data'].get(index) for ch in active_channels} for index in all_indices}
 
-        CA_data = parsed_files['CA']['data']
         experiment_params = all_inputs['experiment_params']
         # Number of seconds of flow that are collected by the GC during an injection
         # NOTE: `sample_vol` in mL, `flow_rate` in standard cubic centimeters per minute (sccm)
@@ -515,41 +553,9 @@ class IntegrateWindow(QMainWindow):
         # Compute number of total gas moles per injection, which is constant between injections and depends only on
         # sample loop volume
         experiment_params['mol_gas'] = physcalc.ideal_gas_moles(V=experiment_params['sample_vol'] / 1000)
-        # Compute values that vary for each injection, namely: voltage, average current (i.e.
-        # averaged over the relevant timescale immediately preceding the injection) and moles
-        # of electrons (this average current times the "flow-seconds" of gas collected)
-        for _, combined_graph in self.combined_graphs.items():
-            # Assume that all channels for the current injection have the same timestamp
-            any_channel = [ch for ch in combined_graph.values() if ch is not None][0]
-            # In milliamperes
-            combined_graph['avg_current'] = physcalc.average_current(
-                cyclic_amp=CA_data, end_time=any_channel['start_time'], duration=IntegrateWindow.CURRENT_AVG_DURATION)
-            combined_graph['mol_e'] = physcalc.electrons_from_amps(
-                A=combined_graph['avg_current'] / 1000, t=experiment_params['flow_seconds'])
 
-            # Find uncorrected voltage of CA trial which the current injection was measuring
-            tolerance = timedelta(seconds=IntegrateWindow.MISALIGNMENT_TOLERANCE)
-            # Start and end CA trial timestamps such that, if an injection has a timestamp
-            # in this range, it will be aligned to that trial.
-            end_times = CA_data['end_time_by_trial']
-            trial_end_ranges = [
-                ((end_times[index - 1] + tolerance).timestamp(), (end_times[index] + tolerance).timestamp()) \
-                for index in range(1, len(end_times))
-            ]
-            injection_timestamp = any_channel['start_time'].timestamp()
-            matching_trials = [
-                index for index, trial_range in enumerate(trial_end_ranges) \
-                if trial_range[0] <= injection_timestamp <= trial_range[1]
-            ]
-            if matching_trials:
-                combined_graph['uncorrected_voltage'] = CA_data['potentials_by_trial'][matching_trials[0]]
-                combined_graph['corrected_voltage'] = physcalc.correct_voltage(
-                    V=combined_graph['uncorrected_voltage'], I=combined_graph['avg_current'] / 1000,
-                    Ru=experiment_params['solution_resistance'], pH=experiment_params['pH'],
-                    deviation=experiment_params['ref_potential'])
-            else:
-                combined_graph['uncorrected_voltage'] = combined_graph['corrected_voltage'] = nan
-            
+        self.ca_init(parsed_files['CA']['data'], experiment_params)
+          
         self.main = QWidget()
         self.setCentralWidget(self.main)
         self.layout = QGridLayout(self.main)
@@ -665,7 +671,8 @@ class IntegrateWindow(QMainWindow):
                 new_x, new_y = x[new_index], y[new_index]
                 new_points.append((new_x, new_y))
 
-            curr_integral = INTEGRATION_BY_MODE[integral['mode']](x, y, new_points)
+            curr_integral = numericintegrate.INTEGRATION_BY_MODE[integral['mode']](
+                x, y, new_points, integral['baseline_type'])
             
             final_integral = numericintegrate.interpret_integral(
                 integral=curr_integral, total_gas_mol=experiment_params['mol_gas'],

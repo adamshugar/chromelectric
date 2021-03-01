@@ -131,17 +131,25 @@ def get_integration_output(integrals_by_page):
                 'moles': integral['moles'],
                 'integration_mode': integral['mode'],
                 'peak_start': integral['points'][0],
-                'peak_end': integral['points'][1]
+                'peak_end': integral['points'][1],
+                'baseline_type': integral['baseline_type']
             }
+
+            baseline_type = integral['baseline_type']
             baseline_pure = integral['baseline'][1]
-            # Convert numpy polynomial fit object to human-readable string of the form 'ax^0 + bx^1 + ...'
-            polystr = ' + '.join([f'{coef}x^{index}' for index, coef in enumerate(baseline_pure.coef)])
-            curr_integral['baseline'] = {
-                'polynomial': polystr,
-                # Numpy arrays are not JSON serializable so convert to list
-                'window': baseline_pure.window.tolist(),
-                'domain': baseline_pure.domain.tolist()
-            }
+
+            if 'poly' in baseline_type.lower():
+                # Convert numpy polynomial fit object to human-readable string of the form 'ax^0 + bx^1 + ...'
+                polystr = ' + '.join([f'{coef}x^{index}' for index, coef in enumerate(baseline_pure.coef)])
+                curr_integral['baseline'] = {
+                    'polynomial': polystr,
+                    # Numpy arrays are not JSON serializable so convert to list
+                    'window': baseline_pure.window.tolist(),
+                    'domain': baseline_pure.domain.tolist()
+                }
+            elif 'linear' in baseline_type.lower():
+                curr_integral['baseline'] = f"y = {baseline_pure['slope']} * x + {baseline_pure['y_int']}"
+            
             curr_list.append(curr_integral)
         if curr_list:
             result[page] = curr_list
@@ -149,9 +157,12 @@ def get_integration_output(integrals_by_page):
 
 j_str = lambda gas: f'{gas} Partial Current (mA)'
 fe_str = lambda gas: f'{gas} Faradaic Efficiency (%)'
+area_str = lambda gas: f'{gas} Raw Area (mV * sec)'
 
 def graphs_to_csv(gases, experiment_params, graphs_by_page, integrals_by_page):
-    gas_fields = [field for gas in gases for field in [j_str(gas), fe_str(gas)]]
+    field_funcs = [j_str, fe_str, area_str]
+
+    gas_fields = [field_func(gas) for gas in gases for field_func in field_funcs]
     fieldnames = [
         'Injection Number', 'Uncorrected Voltage (V)', 'Corrected Voltage (V)',
         *gas_fields, 'Total Faradaic Efficiency (%)',
@@ -165,6 +176,7 @@ def graphs_to_csv(gases, experiment_params, graphs_by_page, integrals_by_page):
             curr_gas = integral['gas']
             gas_stats[j_str(curr_gas)] += integral['partial_current']
             gas_stats[fe_str(curr_gas)] += integral['faradaic_efficiency']
+            gas_stats[area_str(curr_gas)] += integral['area']
             total_fe += integral['faradaic_efficiency']
             total_current += integral['partial_current']
 

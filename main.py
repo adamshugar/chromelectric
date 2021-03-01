@@ -185,10 +185,13 @@ class ApplicationWindow(QMainWindow):
             return False
         if not parsed_file_input['CA']['data']:
             m = platform_messagebox(
-                parent=self, text='Please select a CA file.',
-                buttons=QMessageBox.Ok, icon=QMessageBox.Critical)
-            m.exec()
-            return False
+                parent=self, text='CA file not selected.',
+                informative='Raw peak areas cannot be converted to concentrations without a CA file. Continue anyway?',
+                buttons=QMessageBox.Ok | QMessageBox.Cancel, default_button=QMessageBox.Cancel,
+                icon=QMessageBox.Warning)
+            result = m.exec()
+            if result == QMessageBox.Cancel:
+                return False
         
         missing_channels = [channel for channel in channels if channel in active_channels and channel not in gases_by_channel]
         if missing_channels:

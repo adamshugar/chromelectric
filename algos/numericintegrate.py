@@ -16,7 +16,7 @@ def index_bounds(data, start_value, end_value):
     end_index = np.where(np.isclose(data, end_value))[0][0]
     return (start_index, end_index)
 
-def get_baseline(x_data, y_data, peak_start_index, peak_end_index):
+def poly_baseline(x_data, y_data, peak_start_index, peak_end_index):
     """
     Given an arbitrary function represented as 1D x and y numpy arrays, and start and end indices
     within these arrays denoting a user-identified peak, compute a reasonable baseline for the peak.
@@ -28,8 +28,6 @@ def get_baseline(x_data, y_data, peak_start_index, peak_end_index):
     (polynomial coefficients - N.B. locally centered and scaled for numerical stability), and the indices
     within the baseline numeric array where the peak starts and ends, as a 4-tuple.
     """
-    POLYFIT_DEGREE = 7
-
     peak_size = peak_end_index - peak_start_index + 1 # Peak size, in number of data points contained within
     # Include number of points equal to half of peak size on either side for polynomial baseline fit
     prefix_range = np.arange(max(0, peak_start_index - peak_size // 2), peak_start_index)
@@ -67,7 +65,23 @@ def get_baseline(x_data, y_data, peak_start_index, peak_end_index):
 
     return (poly_numeric, poly_pure, baseline_peak_start, baseline_peak_end)
 
-def correct_for_baseline(x_data, y_data, peak_start_x, peak_end_x):
+def linear_baseline(x_data, y_data, peak_start_index, peak_end_index):
+    peak_size = peak_end_index - peak_start_index + 1
+    axes = [x_data, y_data]
+    start, end = [(x_data[index], y_data[index]) for index in [peak_start_index, peak_end_index]]
+
+    linear_numeric = tuple([np.linspace(start[i], end[i], num=peak_size) for i in range(len(axes))])
+
+    slope = (end[1] - start[1]) / (end[0] - start[0])
+    y_int = end[1] - slope * end[0]
+    linear_pure = {
+        'slope': slope,
+        'y_int': y_int
+    }
+    
+    return (linear_numeric, linear_pure, 0, peak_size)
+
+def correct_for_baseline(x_data, y_data, peak_start_x, peak_end_x, baseline_type):
     """
     Given an arbitrary 2D function and start and end x values for a user-identified peak within the function,
     compute a suitable baseline for the peak and correct for the baseline (subtract baseline from peak).
@@ -77,7 +91,7 @@ def correct_for_baseline(x_data, y_data, peak_start_x, peak_end_x):
     """
     peak_start_index, peak_end_index = index_bounds(x_data, peak_start_x, peak_end_x)
     baseline_numeric, baseline_pure, baseline_peak_start, baseline_peak_end = \
-        get_baseline(x_data, y_data, peak_start_index, peak_end_index)
+        BASELINES_BY_TYPE[baseline_type](x_data, y_data, peak_start_index, peak_end_index)
     _, baseline_y = baseline_numeric
 
     peak_range = np.arange(peak_start_index, peak_end_index + 1)
@@ -95,7 +109,7 @@ def draw_point(coords, axes):
     return axes.plot(coords[0], coords[1], color=BASELINE_COLOR, marker='o', markersize=6)[0]
 
 def draw_integral(x_data, y_data, integral, axes, display_index, render_func, draw_points=False):
-    """Convenience function to draw an integral and optional draw the points associated with it."""
+    """Convenience function to draw an integral and optionally draw the points associated with it."""
     artists = render_func(x_data, y_data, integral, axes)
 
     if draw_points:
@@ -114,7 +128,7 @@ def draw_annotation(integral, y_data, axes, display_index):
         str(display_index), (peak_end[0], peak_end[1] + y_range // 8), ha="center", va="center", size=9,
         bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff80", edgecolor="#cccccc", linewidth=2))
 
-def trapz(x_data, y_data, points):
+def trapz(x_data, y_data, points, baseline_type):
     """
     Integrates a peak trapezoidally, given the full x vs. y graph and a list of points inputted by the user.
     Note that this list of points can be interpretted differently for different integration methods.
@@ -125,7 +139,7 @@ def trapz(x_data, y_data, points):
     peak_start = points[0] if points[0][0] < points[1][0] else points[1]
     peak_end = points[1] if points[0][0] < points[1][0] else points[0]
 
-    corrected = correct_for_baseline(x_data, y_data, peak_start[0], peak_end[0])
+    corrected = correct_for_baseline(x_data, y_data, peak_start[0], peak_end[0], baseline_type)
     peak_x, corrected_peak_y = corrected['peak']
     baseline_numeric, baseline_pure = corrected['baseline']
 
@@ -134,6 +148,7 @@ def trapz(x_data, y_data, points):
     return {
         'area': area,
         'baseline': (baseline_numeric, baseline_pure),
+        'baseline_type': baseline_type,
         'points': (peak_start, peak_end),
     }
 
@@ -185,3 +200,21 @@ def interpret_integral(integral, total_gas_mol, mol_e, calib_val, reduction_coun
         'faradaic_efficiency': faradaic_eff,
         'partial_current': partial_current
     }
+
+# TODO: Add Gaussian and Lorentzian integration types
+
+# Function handles to numerically integrate
+INTEGRATION_BY_MODE = {
+    'Trapezoidal': trapz,
+}
+
+# Function handles to draw a graphical representation of the successful numerical integration
+RENDER_BY_MODE = {
+    'Trapezoidal': trapz_draw,
+}
+
+POLYFIT_DEGREE = 7
+BASELINES_BY_TYPE = {
+    f'Poly (Deg. {POLYFIT_DEGREE})': poly_baseline,
+    'Linear': linear_baseline
+}
